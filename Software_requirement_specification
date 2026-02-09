@@ -1,0 +1,347 @@
+Software Requirements Specification (SRS)
+HR Leave & Attendance Management System (3 Roles)
+1. Purpose
+
+The purpose of this system is to provide a simple internal web application for an organization to:
+
+manage employee profiles,
+
+handle leave requests with approval workflow,
+
+maintain leave balances,
+
+record manual attendance,
+
+maintain a holiday calendar, and
+
+generate monthly summaries for HR review and payroll support.
+
+This system is designed for small-to-medium teams where attendance is maintained manually and leave approvals follow a reporting-manager workflow.
+
+2. Scope
+2.1 In-Scope Features (MVP)
+
+The system will include the following modules:
+
+Employee Management
+
+Add, update, deactivate employees
+
+Assign reporting manager
+
+Maintain department/designation details
+
+Leave Management
+
+Leave request application (employee)
+
+Leave approval/rejection (manager)
+
+Leave request tracking and history
+
+Leave cancellation (employee for pending leaves)
+
+Leave Balance Management
+
+View leave balance (employee)
+
+Allocate/adjust leave balances (admin)
+
+Auto update balance on approval/cancellation
+
+Attendance Management (Manual)
+
+Employee marks their attendance (Present/WFH/Half-day)
+
+Admin can mark/correct attendance for any employee
+
+Attendance monthly view for employee and admin
+
+Holiday Calendar
+
+Maintain holiday list (admin)
+
+View holidays (all roles)
+
+Reports
+
+Monthly leave summary (admin; manager for team; employee for self)
+
+Monthly attendance summary (admin; manager for team; employee for self)
+
+Export as CSV (optional but recommended)
+
+2.2 Out of Scope (for this project)
+
+These are intentionally excluded to keep the project small:
+
+Payroll processing and salary calculation
+
+Biometric/device attendance integration
+
+Geo-location attendance and selfie verification
+
+Advanced leave policies (carry-forward, encashment, accrual per month)
+
+Multi-branch/region holiday variations (can be added later)
+
+Shift scheduling and overtime calculations
+
+3. Users and User Characteristics
+3.1 User Roles
+
+The system will support three roles:
+
+A) Employee
+
+Description: Any staff member who applies leaves and marks attendance.
+
+Primary goals
+
+Apply leave quickly and track approval status
+
+See leave balance anytime
+
+Mark daily attendance manually
+
+View monthly attendance and holidays
+
+Typical usage
+
+Uses system daily (attendance) and occasionally (leave)
+
+B) Manager
+
+Description: A user who manages a team and approves/rejects leave requests from their direct reportees.
+
+Primary goals
+
+Review and approve/reject leave requests
+
+View upcoming leaves to plan team availability
+
+View team leave summaries (monthly)
+
+Typical usage
+
+Uses system when leave requests come in; checks team view occasionally
+
+C) Admin (HR/Admin)
+
+Description: HR or admin staff responsible for setting up employees, leave balances, holidays and reports.
+
+Primary goals
+
+Maintain employee list and reporting structure
+
+Allocate and correct leave balances
+
+Correct attendance issues
+
+Generate reports for HR records and payroll support
+
+Typical usage
+
+Uses system daily/weekly for operations and monthly for reports
+
+4. System Context (High-Level)
+4.1 System Overview
+
+This is a web-based management system with login-based access control. Users perform actions based on their role:
+
+Employees apply leave and mark attendance
+
+Managers approve/reject leave
+
+Admin manages employees, policies (basic), attendance corrections, holidays, reports
+
+5. Assumptions and Dependencies
+Assumptions
+
+Organization has a defined reporting manager for each employee (except admin)
+
+Attendance is manual (no external device)
+
+Leave types are predefined (CL/SL/EL/LWP) for MVP
+
+Dependencies
+
+Email/Password login system exists
+
+File upload storage (only if leave attachment is included)
+
+6. Functional Requirements (Role-wise)
+6.1 Employee Requirements
+FR-E1 Login & Access
+
+Employee shall be able to login using credentials provided by Admin.
+
+Employee shall only access their own leave and attendance data.
+
+FR-E2 Apply Leave
+
+Employee shall submit a leave request with:
+
+leave type, start date, end date, reason, optional attachment
+
+System shall prevent overlapping leave requests.
+
+System shall validate leave balance (for paid leave types).
+
+FR-E3 Track Leave Requests
+
+Employee shall view list of their leave requests with status:
+
+Pending / Approved / Rejected / Cancelled
+
+Employee shall view manager comments on decision.
+
+FR-E4 Cancel Leave
+
+Employee shall be able to cancel a Pending leave request.
+
+System shall update status to Cancelled.
+
+FR-E5 View Leave Balance
+
+Employee shall view available leave balance by leave type.
+
+FR-E6 Mark Attendance (Manual)
+
+Employee shall be able to mark attendance for the current day as:
+
+Present / Work From Home / Half-day
+
+System shall restrict multiple entries for same day.
+
+FR-E7 View Attendance & Holidays
+
+Employee shall view monthly attendance history.
+
+Employee shall view holiday calendar.
+
+6.2 Manager Requirements
+FR-M1 View Team Members
+
+Manager shall view a list of employees reporting to them.
+
+FR-M2 Approve/Reject Leave
+
+Manager shall view pending leave requests of team members.
+
+Manager shall approve or reject with optional comments.
+
+System shall notify employee via in-app status update.
+
+FR-M3 Team Leave Visibility
+
+Manager shall view approved leave schedule for team (list/calendar view).
+
+FR-M4 Team Reports
+
+Manager shall view monthly leave summary for their team.
+
+6.3 Admin Requirements
+FR-A1 Employee CRUD
+
+Admin shall create, update, deactivate employees.
+
+Admin shall assign a manager to an employee.
+
+FR-A2 Leave Type Setup (MVP: fixed types)
+
+Admin shall maintain leave types (optional if hardcoded).
+
+FR-A3 Allocate Leave Balances
+
+Admin shall allocate yearly leave balances for each employee.
+
+Admin shall adjust balances if required (corrections).
+
+FR-A4 Attendance Correction
+
+Admin shall mark attendance for any employee for any day.
+
+Admin shall edit/correct existing attendance entries with reason.
+
+FR-A5 Holiday Management
+
+Admin shall create, update, delete holidays.
+
+FR-A6 Reports
+
+Admin shall generate monthly:
+
+leave summary reports
+
+attendance summary reports
+
+Admin shall filter reports by department/employee.
+
+Admin shall export reports as CSV (optional).
+
+7. Non-Functional Requirements (NFR)
+NFR-1 Security & Access Control
+
+Role-based access control must be enforced.
+
+Employees must not access other employees’ records.
+
+NFR-2 Usability
+
+Simple UI with minimal steps:
+
+Apply leave in ≤ 1 minute
+
+Approve leave in ≤ 30 seconds
+
+NFR-3 Performance
+
+Normal operations should respond within 2 seconds for typical datasets (up to 500 employees).
+
+NFR-4 Auditability (Recommended)
+
+System should log key actions:
+
+leave approval/rejection, attendance correction, balance edits
+
+NFR-5 Data Integrity
+
+No duplicate attendance entry for same employee/day.
+
+No overlapping approved leaves for same employee.
+
+8. Key Workflows
+WF-1 Leave Application & Approval
+
+Employee submits leave request → Status = Pending
+
+Manager reviews → Approves or Rejects
+
+If approved → leave balance reduced
+
+Employee views status & comment
+
+WF-2 Attendance Marking
+
+Employee marks today’s attendance
+
+Admin can later correct if wrong
+
+Monthly attendance view updated
+
+WF-3 Monthly Reporting
+
+Admin selects month/year
+
+System generates leave and attendance summaries
+
+Admin exports file if needed
+
+9. Constraints (for Small Project)
+
+Manual attendance only
+
+Simple leave balances (yearly allocation)
+
+No advanced payroll/biometric integrations

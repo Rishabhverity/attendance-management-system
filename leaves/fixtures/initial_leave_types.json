@@ -1,0 +1,50 @@
+[
+  {
+    "model": "leaves.leavetype",
+    "pk": 1,
+    "fields": {
+      "code": "CL",
+      "name": "Casual Leave",
+      "is_paid": true,
+      "requires_documentation": false,
+      "max_consecutive_days": null,
+      "description": "Casual leave for personal reasons, short-term absences, and emergencies."
+    }
+  },
+  {
+    "model": "leaves.leavetype",
+    "pk": 2,
+    "fields": {
+      "code": "SL",
+      "name": "Sick Leave",
+      "is_paid": true,
+      "requires_documentation": true,
+      "max_consecutive_days": null,
+      "description": "Sick leave for health-related absences. Medical certificate may be required for extended periods."
+    }
+  },
+  {
+    "model": "leaves.leavetype",
+    "pk": 3,
+    "fields": {
+      "code": "EL",
+      "name": "Earned Leave",
+      "is_paid": true,
+      "requires_documentation": false,
+      "max_consecutive_days": null,
+      "description": "Earned leave accrued over time. Can be used for vacations and planned time off."
+    }
+  },
+  {
+    "model": "leaves.leavetype",
+    "pk": 4,
+    "fields": {
+      "code": "LWP",
+      "name": "Leave Without Pay",
+      "is_paid": false,
+      "requires_documentation": false,
+      "max_consecutive_days": null,
+      "description": "Leave without pay for situations where other leave balances are exhausted."
+    }
+  }
+]
