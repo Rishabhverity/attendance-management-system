@@ -39,22 +39,44 @@ urlpatterns = [
     path('leaves/<int:leave_id>/approve/', views.approve_leave_request, name='approve_leave'),
     path('leaves/<int:leave_id>/reject/', views.reject_leave_request, name='reject_leave'),
 
-    path('leaves/team-calendar/', placeholder_view, name='team_leaves'),
-
-    # Attendance Management
-    path('attendance/mark/', views.mark_attendance_view, name='mark_attendance'),
-    path('attendance/my-attendance/', views.my_attendance_view, name='my_attendance'),
-    path('attendance/team/', placeholder_view, name='team_attendance'),
+    # Manager Team Management
+    path('leaves/team-calendar/', views.team_leave_calendar_view, name='team_leaves'),
+    path('attendance/team/', views.team_attendance_view, name='team_attendance'),
     path('reports/team/', placeholder_view, name='team_reports'),
 
-    # Admin placeholders
-    path('admin/employees/', placeholder_view, name='employee_list'),
-    path('admin/departments/', placeholder_view, name='department_list'),
-    path('admin/designations/', placeholder_view, name='designation_list'),
-    path('admin/leave-types/', placeholder_view, name='leave_types'),
-    path('admin/leave-balances/', placeholder_view, name='leave_balance_allocation'),
-    path('admin/attendance/correct/', placeholder_view, name='attendance_correction'),
-    path('admin/holidays/', placeholder_view, name='holiday_list'),
-    path('admin/reports/', placeholder_view, name='reports'),
-    path('admin/audit-logs/', placeholder_view, name='audit_logs'),
+    # Employee Attendance Management
+    path('attendance/mark/', views.mark_attendance_view, name='mark_attendance'),
+    path('attendance/my-attendance/', views.my_attendance_view, name='my_attendance'),
+
+
+    # Admin/Settings - Department Management
+    path('settings/departments/', views.department_list_view, name='department_list'),
+    path('settings/departments/create/', views.department_create_view, name='department_create'),
+    path('settings/departments/<int:dept_id>/edit/', views.department_edit_view, name='department_edit'),
+    path('settings/departments/<int:dept_id>/delete/', views.department_delete_view, name='department_delete'),
+
+    # Admin/Settings - Designation Management
+    path('settings/designations/', views.designation_list_view, name='designation_list'),
+    path('settings/designations/create/', views.designation_create_view, name='designation_create'),
+    path('settings/designations/<int:desig_id>/edit/', views.designation_edit_view, name='designation_edit'),
+    path('settings/designations/<int:desig_id>/delete/', views.designation_delete_view, name='designation_delete'),
+
+    # Admin/Settings - Leave Types Management
+    path('settings/leave-types/', views.leave_types_list_view, name='leave_types'),
+    path('settings/leave-types/create/', views.leave_type_create_view, name='leave_type_create'),
+    path('settings/leave-types/<int:lt_id>/edit/', views.leave_type_edit_view, name='leave_type_edit'),
+    path('settings/leave-types/<int:lt_id>/delete/', views.leave_type_delete_view, name='leave_type_delete'),
+
+    # Admin/Settings - Holiday Management
+    path('settings/holidays/', views.holiday_list_view, name='holiday_list'),
+    path('settings/holidays/create/', views.holiday_create_view, name='holiday_create'),
+    path('settings/holidays/<int:holiday_id>/edit/', views.holiday_edit_view, name='holiday_edit'),
+    path('settings/holidays/<int:holiday_id>/delete/', views.holiday_delete_view, name='holiday_delete'),
+
+    # Admin/Settings placeholders
+    path('settings/employees/', placeholder_view, name='employee_list'),
+    path('settings/leave-balances/', placeholder_view, name='leave_balance_allocation'),
+    path('settings/attendance/correct/', placeholder_view, name='attendance_correction'),
+    path('settings/reports/', placeholder_view, name='reports'),
+    path('settings/audit-logs/', placeholder_view, name='audit_logs'),
 ]

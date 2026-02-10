@@ -85,7 +85,7 @@
                             <div class="list-group-item px-0">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <strong>{{ leave.employee.user.get_full_name|default:leave.employee.user.username }}</strong>
+                                        <strong>{{ leave.employee.get_full_name|default:leave.employee.username }}</strong>
                                         <br>
                                         <small class="text-muted">{{ leave.leave_type.name }}</small>
                                     </div>
@@ -113,7 +113,7 @@
                             <div class="list-group-item px-0">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
-                                        <strong>{{ leave.employee.user.get_full_name|default:leave.employee.user.username }}</strong>
+                                        <strong>{{ leave.employee.get_full_name|default:leave.employee.username }}</strong>
                                         <br>
                                         <small class="text-muted">
                                             {{ leave.leave_type.name }} •

@@ -1065,5 +1065,971 @@ def reject_leave_request(request, leave_id):
         }, status=404)
 
 
+# =============================================================================
+# MANAGER VIEWS - Team Management
+# =============================================================================
+
+@login_required
+def team_leave_calendar_view(request):
+    """
+    Manager view for team leave calendar - shows all team members' leaves
+    """
+    # Check if user is manager or admin
+    if request.user.role not in ['MANAGER', 'ADMIN']:
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('frontend:dashboard')
+
+    try:
+        employee_profile = request.user.profile
+    except EmployeeProfile.DoesNotExist:
+        employee_profile = EmployeeProfile.objects.create(
+            user=request.user,
+            employee_id=request.user.employee_id
+        )
+
+    # Get month and year from query params
+    today = timezone.now().date()
+    selected_month = int(request.GET.get('month', today.month))
+    selected_year = int(request.GET.get('year', today.year))
+
+    # Get filter parameters
+    employee_filter = request.GET.get('employee', 'ALL')
+    leave_type_filter = request.GET.get('leave_type', 'ALL')
+
+    # Get team members
+    if request.user.role == 'ADMIN':
+        team_members = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    else:
+        team_members = User.objects.filter(
+            profile__reporting_manager=request.user,
+            is_active=True
+        ).order_by('first_name', 'last_name')
+
+    # Base query for leave requests
+    if request.user.role == 'ADMIN':
+        leave_requests = LeaveRequest.objects.filter(
+            status='APPROVED',
+            start_date__year=selected_year,
+            start_date__month__lte=selected_month,
+            end_date__month__gte=selected_month
+        )
+    else:
+        leave_requests = LeaveRequest.objects.filter(
+            employee__profile__reporting_manager=request.user,
+            status='APPROVED',
+            start_date__year=selected_year,
+            start_date__month__lte=selected_month,
+            end_date__month__gte=selected_month
+        )
+
+    # Apply filters
+    if employee_filter != 'ALL':
+        leave_requests = leave_requests.filter(employee_id=employee_filter)
+
+    if leave_type_filter != 'ALL':
+        leave_requests = leave_requests.filter(leave_type_id=leave_type_filter)
+
+    leave_requests = leave_requests.select_related('employee', 'leave_type').order_by('start_date')
+
+    # Get calendar for selected month
+    cal = calendar.monthcalendar(selected_year, selected_month)
+
+    # Create calendar data structure
+    calendar_data = []
+    for week in cal:
+        week_data = []
+        for day in week:
+            if day == 0:
+                week_data.append(None)
+            else:
+                date_obj = datetime(selected_year, selected_month, day).date()
+
+                # Get leaves for this date
+                leaves_on_date = []
+                for leave in leave_requests:
+                    if leave.start_date <= date_obj <= leave.end_date:
+                        leaves_on_date.append(leave)
+
+                # Get holidays
+                holiday = Holiday.objects.filter(date=date_obj).first()
+
+                day_info = {
+                    'day': day,
+                    'date': date_obj,
+                    'is_today': date_obj == today,
+                    'is_weekend': date_obj.weekday() >= 5,
+                    'is_holiday': holiday is not None,
+                    'holiday': holiday,
+                    'leaves': leaves_on_date,
+                }
+                week_data.append(day_info)
+        calendar_data.append(week_data)
+
+    # Navigation months
+    current_date = datetime(selected_year, selected_month, 1).date()
+    prev_month = (current_date.replace(day=1) - timedelta(days=1))
+    next_month_first = (current_date.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+    # Get leave types for filter
+    leave_types = LeaveType.objects.all()
+
+    context = {
+        'calendar_data': calendar_data,
+        'selected_month': selected_month,
+        'selected_year': selected_year,
+        'month_name': calendar.month_name[selected_month],
+        'prev_month': prev_month.month,
+        'prev_year': prev_month.year,
+        'next_month': next_month_first.month,
+        'next_year': next_month_first.year,
+        'weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        'team_members': team_members,
+        'leave_types': leave_types,
+        'employee_filter': employee_filter,
+        'leave_type_filter': leave_type_filter,
+    }
+
+    return render(request, 'frontend/manager/team_calendar.html', context)
 
 
+@login_required
+def team_attendance_view(request):
+    """
+    Manager view for team attendance - daily/weekly/monthly view
+    """
+    # Check if user is manager or admin
+    if request.user.role not in ['MANAGER', 'ADMIN']:
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('frontend:dashboard')
+
+    # Get date filter
+    today = timezone.now().date()
+    date_filter = request.GET.get('date', str(today))
+    view_type = request.GET.get('view', 'daily')  # daily, weekly, monthly
+
+    try:
+        filter_date = datetime.strptime(date_filter, '%Y-%m-%d').date()
+    except ValueError:
+        filter_date = today
+
+    # Get team members
+    if request.user.role == 'ADMIN':
+        team_members = User.objects.filter(is_active=True).select_related('profile')
+    else:
+        team_members = User.objects.filter(
+            profile__reporting_manager=request.user,
+            is_active=True
+        ).select_related('profile')
+
+    # Get attendance based on view type
+    attendance_data = []
+
+    if view_type == 'daily':
+        # Single day view
+        for member in team_members:
+            attendance = Attendance.objects.filter(
+                employee=member,
+                date=filter_date
+            ).first()
+
+            # Check if on leave
+            on_leave = LeaveRequest.objects.filter(
+                employee=member,
+                status='APPROVED',
+                start_date__lte=filter_date,
+                end_date__gte=filter_date
+            ).first()
+
+            attendance_data.append({
+                'employee': member,
+                'attendance': attendance,
+                'on_leave': on_leave,
+            })
+
+    elif view_type == 'weekly':
+        # Week view
+        start_of_week = filter_date - timedelta(days=filter_date.weekday())
+        end_of_week = start_of_week + timedelta(days=6)
+
+        for member in team_members:
+            weekly_attendance = Attendance.objects.filter(
+                employee=member,
+                date__gte=start_of_week,
+                date__lte=end_of_week
+            ).order_by('date')
+
+            attendance_data.append({
+                'employee': member,
+                'weekly_attendance': weekly_attendance,
+                'start_date': start_of_week,
+                'end_date': end_of_week,
+            })
+
+    elif view_type == 'monthly':
+        # Month view
+        start_of_month = filter_date.replace(day=1)
+        if filter_date.month == 12:
+            end_of_month = filter_date.replace(year=filter_date.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            end_of_month = filter_date.replace(month=filter_date.month + 1, day=1) - timedelta(days=1)
+
+        for member in team_members:
+            monthly_stats = Attendance.objects.filter(
+                employee=member,
+                date__gte=start_of_month,
+                date__lte=end_of_month
+            ).aggregate(
+                total=Count('id'),
+                present=Count('id', filter=Q(status='PRESENT')),
+                wfh=Count('id', filter=Q(status='WFH')),
+                half_day=Count('id', filter=Q(status='HALF_DAY')),
+                absent=Count('id', filter=Q(status='ABSENT'))
+            )
+
+            attendance_data.append({
+                'employee': member,
+                'monthly_stats': monthly_stats,
+                'month': filter_date.strftime('%B %Y'),
+            })
+
+    context = {
+        'attendance_data': attendance_data,
+        'view_type': view_type,
+        'filter_date': filter_date,
+        'today': today,
+    }
+
+    return render(request, 'frontend/manager/team_attendance.html', context)
+
+
+# =============================================================================
+# ADMIN VIEWS - Master Data Management
+# =============================================================================
+
+@login_required
+def department_list_view(request):
+    """
+    Admin view for managing departments (CRUD operations)
+    """
+    # Check if user is admin
+    if request.user.role != 'ADMIN':
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('frontend:dashboard')
+
+    from employees.models import Department
+
+    departments = Department.objects.all().order_by('name')
+
+    context = {
+        'departments': departments,
+    }
+
+    return render(request, 'frontend/admin/departments.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def department_create_view(request):
+    """
+    Create a new department (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    from employees.models import Department
+
+    name = request.POST.get('name')
+    description = request.POST.get('description', '')
+
+    if not name:
+        return HttpResponse(
+            '<div class="alert alert-danger">Department name is required.</div>',
+            status=400
+        )
+
+    # Check if department already exists
+    if Department.objects.filter(name=name).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">A department with this name already exists.</div>',
+            status=400
+        )
+
+    # Create department
+    department = Department.objects.create(
+        name=name,
+        description=description
+    )
+
+    messages.success(request, f'Department "{name}" created successfully!')
+
+    # Return HTMX response - redirect to refresh page
+    if request.headers.get('HX-Request'):
+        response = HttpResponse(status=200)
+        response['HX-Redirect'] = '/settings/departments/'
+        return response
+
+    return redirect('frontend:department_list')
+
+
+@login_required
+@require_http_methods(["POST"])
+def department_edit_view(request, dept_id):
+    """
+    Edit an existing department (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    from employees.models import Department
+
+    try:
+        department = Department.objects.get(id=dept_id)
+    except Department.DoesNotExist:
+        return HttpResponse(
+            '<div class="alert alert-danger">Department not found.</div>',
+            status=404
+        )
+
+    name = request.POST.get('name')
+    description = request.POST.get('description', '')
+
+    if not name:
+        return HttpResponse(
+            '<div class="alert alert-danger">Department name is required.</div>',
+            status=400
+        )
+
+    # Check if another department has this name
+    if Department.objects.filter(name=name).exclude(id=dept_id).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">A department with this name already exists.</div>',
+            status=400
+        )
+
+    # Update department
+    department.name = name
+    department.description = description
+    department.save()
+
+    messages.success(request, f'Department "{name}" updated successfully!')
+
+    # Return HTMX response - redirect to refresh page
+    if request.headers.get('HX-Request'):
+        response = HttpResponse(status=200)
+        response['HX-Redirect'] = '/settings/departments/'
+        return response
+
+    return redirect('frontend:department_list')
+
+
+@login_required
+@require_http_methods(["POST"])
+def department_delete_view(request, dept_id):
+    """
+    Delete a department (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    from employees.models import Department
+
+    try:
+        department = Department.objects.get(id=dept_id)
+        dept_name = department.name
+
+        # Check if department has employees
+        if department.employees.exists():
+            return HttpResponse(
+                '<div class="alert alert-danger">Cannot delete department with assigned employees.</div>',
+                status=400
+            )
+
+        department.delete()
+        messages.success(request, f'Department "{dept_name}" deleted successfully!')
+
+        # Return HTMX response
+        if request.headers.get('HX-Request'):
+            return HttpResponse(f'<tr id="dept-row-{dept_id}"></tr>')
+
+        return redirect('frontend:department_list')
+
+    except Department.DoesNotExist:
+        return HttpResponse(
+            '<div class="alert alert-danger">Department not found.</div>',
+            status=404
+        )
+
+
+# =============================================
+# ADMIN - DESIGNATION MANAGEMENT VIEWS
+# =============================================
+
+@login_required
+def designation_list_view(request):
+    """
+    Admin view for managing designations
+    """
+    if request.user.role != 'ADMIN':
+        messages.error(request, 'Permission denied.')
+        return redirect('frontend:dashboard')
+
+    from employees.models import Designation
+
+    designations = Designation.objects.all().order_by('title')
+
+    context = {
+        'designations': designations,
+    }
+    return render(request, 'frontend/admin/designations.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def designation_create_view(request):
+    """
+    Create a new designation (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return HttpResponse(
+            '<div class="alert alert-danger">Permission denied.</div>',
+            status=403
+        )
+
+    from employees.models import Designation
+
+    title = request.POST.get('title', '').strip()
+    description = request.POST.get('description', '').strip()
+
+    if not title:
+        return HttpResponse(
+            '<div class="alert alert-danger">Designation title is required.</div>',
+            status=400
+        )
+
+    # Check if designation already exists
+    if Designation.objects.filter(title=title).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">A designation with this title already exists.</div>',
+            status=400
+        )
+
+    # Create designation
+    Designation.objects.create(
+        title=title,
+        description=description
+    )
+
+    messages.success(request, f'Designation "{title}" created successfully!')
+
+    # Return HTMX response - redirect to refresh page
+    if request.headers.get('HX-Request'):
+        response = HttpResponse(status=200)
+        response['HX-Redirect'] = '/settings/designations/'
+        return response
+
+    return redirect('frontend:designation_list')
+
+
+@login_required
+@require_http_methods(["POST"])
+def designation_edit_view(request, desig_id):
+    """
+    Edit a designation (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return HttpResponse(
+            '<div class="alert alert-danger">Permission denied.</div>',
+            status=403
+        )
+
+    from employees.models import Designation
+
+    title = request.POST.get('title', '').strip()
+    description = request.POST.get('description', '').strip()
+
+    if not title:
+        return HttpResponse(
+            '<div class="alert alert-danger">Designation title is required.</div>',
+            status=400
+        )
+
+    try:
+        designation = Designation.objects.get(id=desig_id)
+    except Designation.DoesNotExist:
+        return HttpResponse(
+            '<div class="alert alert-danger">Designation not found.</div>',
+            status=404
+        )
+
+    # Check if another designation has this title
+    if Designation.objects.filter(title=title).exclude(id=desig_id).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">A designation with this title already exists.</div>',
+            status=400
+        )
+
+    # Update designation
+    designation.title = title
+    designation.description = description
+    designation.save()
+
+    messages.success(request, f'Designation "{title}" updated successfully!')
+
+    # Return HTMX response - redirect to refresh page
+    if request.headers.get('HX-Request'):
+        response = HttpResponse(status=200)
+        response['HX-Redirect'] = '/settings/designations/'
+        return response
+
+    return redirect('frontend:designation_list')
+
+
+@login_required
+@require_http_methods(["POST"])
+def designation_delete_view(request, desig_id):
+    """
+    Delete a designation (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    from employees.models import Designation
+
+    try:
+        designation = Designation.objects.get(id=desig_id)
+        desig_title = designation.title
+
+        # Check if designation has employees
+        if designation.employees.exists():
+            return JsonResponse({
+                'success': False,
+                'message': 'Cannot delete designation with assigned employees.'
+            }, status=400)
+
+        designation.delete()
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Designation "{desig_title}" deleted successfully!'
+        })
+
+    except Designation.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Designation not found.'
+        }, status=404)
+
+
+# =============================================
+# ADMIN - LEAVE TYPES MANAGEMENT VIEWS
+# =============================================
+
+@login_required
+def leave_types_list_view(request):
+    """
+    Admin view for managing leave types
+    """
+    if request.user.role != 'ADMIN':
+        messages.error(request, 'Permission denied.')
+        return redirect('frontend:dashboard')
+
+    from leaves.models import LeaveType
+
+    leave_types = LeaveType.objects.all().order_by('code')
+
+    context = {
+        'leave_types': leave_types,
+    }
+    return render(request, 'frontend/admin/leave_types.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def leave_type_create_view(request):
+    """
+    Create a new leave type (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return HttpResponse(
+            '<div class="alert alert-danger">Permission denied.</div>',
+            status=403
+        )
+
+    from leaves.models import LeaveType
+
+    code = request.POST.get('code', '').strip().upper()
+    name = request.POST.get('name', '').strip()
+    description = request.POST.get('description', '').strip()
+    is_paid = request.POST.get('is_paid') == 'on'
+    requires_documentation = request.POST.get('requires_documentation') == 'on'
+    max_consecutive_days = request.POST.get('max_consecutive_days', '').strip()
+
+    if not code or not name:
+        return HttpResponse(
+            '<div class="alert alert-danger">Leave type code and name are required.</div>',
+            status=400
+        )
+
+    # Validate max_consecutive_days if provided
+    if max_consecutive_days:
+        try:
+            max_consecutive_days = int(max_consecutive_days)
+            if max_consecutive_days <= 0:
+                return HttpResponse(
+                    '<div class="alert alert-danger">Max consecutive days must be a positive number.</div>',
+                    status=400
+                )
+        except ValueError:
+            return HttpResponse(
+                '<div class="alert alert-danger">Max consecutive days must be a valid number.</div>',
+                status=400
+            )
+    else:
+        max_consecutive_days = None
+
+    # Check if leave type code already exists
+    if LeaveType.objects.filter(code=code).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">A leave type with this code already exists.</div>',
+            status=400
+        )
+
+    # Create leave type
+    LeaveType.objects.create(
+        code=code,
+        name=name,
+        description=description,
+        is_paid=is_paid,
+        requires_documentation=requires_documentation,
+        max_consecutive_days=max_consecutive_days
+    )
+
+    messages.success(request, f'Leave type "{code}" created successfully!')
+
+    # Return HTMX response - redirect to refresh page
+    if request.headers.get('HX-Request'):
+        response = HttpResponse(status=200)
+        response['HX-Redirect'] = '/settings/leave-types/'
+        return response
+
+    return redirect('frontend:leave_types')
+
+
+@login_required
+@require_http_methods(["POST"])
+def leave_type_edit_view(request, lt_id):
+    """
+    Edit a leave type (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return HttpResponse(
+            '<div class="alert alert-danger">Permission denied.</div>',
+            status=403
+        )
+
+    from leaves.models import LeaveType
+
+    code = request.POST.get('code', '').strip().upper()
+    name = request.POST.get('name', '').strip()
+    description = request.POST.get('description', '').strip()
+    is_paid = request.POST.get('is_paid') == 'on'
+    requires_documentation = request.POST.get('requires_documentation') == 'on'
+    max_consecutive_days = request.POST.get('max_consecutive_days', '').strip()
+
+    if not code or not name:
+        return HttpResponse(
+            '<div class="alert alert-danger">Leave type code and name are required.</div>',
+            status=400
+        )
+
+    # Validate max_consecutive_days if provided
+    if max_consecutive_days:
+        try:
+            max_consecutive_days = int(max_consecutive_days)
+            if max_consecutive_days <= 0:
+                return HttpResponse(
+                    '<div class="alert alert-danger">Max consecutive days must be a positive number.</div>',
+                    status=400
+                )
+        except ValueError:
+            return HttpResponse(
+                '<div class="alert alert-danger">Max consecutive days must be a valid number.</div>',
+                status=400
+            )
+    else:
+        max_consecutive_days = None
+
+    try:
+        leave_type = LeaveType.objects.get(id=lt_id)
+    except LeaveType.DoesNotExist:
+        return HttpResponse(
+            '<div class="alert alert-danger">Leave type not found.</div>',
+            status=404
+        )
+
+    # Check if another leave type has this code
+    if LeaveType.objects.filter(code=code).exclude(id=lt_id).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">A leave type with this code already exists.</div>',
+            status=400
+        )
+
+    # Update leave type
+    leave_type.code = code
+    leave_type.name = name
+    leave_type.description = description
+    leave_type.is_paid = is_paid
+    leave_type.requires_documentation = requires_documentation
+    leave_type.max_consecutive_days = max_consecutive_days
+    leave_type.save()
+
+    messages.success(request, f'Leave type "{code}" updated successfully!')
+
+    # Return HTMX response - redirect to refresh page
+    if request.headers.get('HX-Request'):
+        response = HttpResponse(status=200)
+        response['HX-Redirect'] = '/settings/leave-types/'
+        return response
+
+    return redirect('frontend:leave_types')
+
+
+@login_required
+@require_http_methods(["POST"])
+def leave_type_delete_view(request, lt_id):
+    """
+    Delete a leave type (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    from leaves.models import LeaveType
+
+    try:
+        leave_type = LeaveType.objects.get(id=lt_id)
+        lt_code = leave_type.code
+
+        # Check if leave type is being used in leave requests
+        if leave_type.leave_requests.exists():
+            return JsonResponse({
+                'success': False,
+                'message': 'Cannot delete leave type that has been used in leave requests.'
+            }, status=400)
+
+        # Check if leave type is being used in leave balances
+        if leave_type.leave_balances.exists():
+            return JsonResponse({
+                'success': False,
+                'message': 'Cannot delete leave type that has leave balances allocated.'
+            }, status=400)
+
+        leave_type.delete()
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Leave type "{lt_code}" deleted successfully!'
+        })
+
+    except LeaveType.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Leave type not found.'
+        }, status=404)
+
+
+# =============================================
+# ADMIN - HOLIDAY MANAGEMENT VIEWS
+# =============================================
+
+@login_required
+def holiday_list_view(request):
+    """
+    Admin view for managing holidays
+    """
+    if request.user.role != 'ADMIN':
+        messages.error(request, 'Permission denied.')
+        return redirect('frontend:dashboard')
+
+    from attendance.models import Holiday
+    from datetime import datetime
+
+    year = request.GET.get('year')
+    if year:
+        try:
+            year = int(year)
+            holidays = Holiday.objects.filter(date__year=year).order_by('date')
+        except ValueError:
+            holidays = Holiday.objects.all().order_by('date')
+    else:
+        # Default to current year
+        year = datetime.now().year
+        holidays = Holiday.objects.filter(date__year=year).order_by('date')
+
+    # Get available years for filter
+    available_years = Holiday.objects.dates('date', 'year', order='DESC')
+
+    context = {
+        'holidays': holidays,
+        'selected_year': year,
+        'available_years': available_years,
+    }
+    return render(request, 'frontend/admin/holidays.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def holiday_create_view(request):
+    """
+    Create a new holiday (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return HttpResponse(
+            '<div class="alert alert-danger">Permission denied.</div>',
+            status=403
+        )
+
+    from attendance.models import Holiday
+    from datetime import datetime
+
+    name = request.POST.get('name', '').strip()
+    date_str = request.POST.get('date', '').strip()
+    description = request.POST.get('description', '').strip()
+    is_optional = request.POST.get('is_optional') == 'on'
+
+    if not name or not date_str:
+        return HttpResponse(
+            '<div class="alert alert-danger">Holiday name and date are required.</div>',
+            status=400
+        )
+
+    # Parse and validate date
+    try:
+        holiday_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return HttpResponse(
+            '<div class="alert alert-danger">Invalid date format.</div>',
+            status=400
+        )
+
+    # Check if holiday already exists for this date
+    if Holiday.objects.filter(date=holiday_date).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">A holiday already exists for this date.</div>',
+            status=400
+        )
+
+    # Create holiday
+    Holiday.objects.create(
+        name=name,
+        date=holiday_date,
+        description=description,
+        is_optional=is_optional,
+        created_by=request.user
+    )
+
+    messages.success(request, f'Holiday "{name}" created successfully!')
+
+    # Return HTMX response - redirect to refresh page
+    if request.headers.get('HX-Request'):
+        response = HttpResponse(status=200)
+        response['HX-Redirect'] = f'/settings/holidays/?year={holiday_date.year}'
+        return response
+
+    return redirect('frontend:holiday_list')
+
+
+@login_required
+@require_http_methods(["POST"])
+def holiday_edit_view(request, holiday_id):
+    """
+    Edit a holiday (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return HttpResponse(
+            '<div class="alert alert-danger">Permission denied.</div>',
+            status=403
+        )
+
+    from attendance.models import Holiday
+    from datetime import datetime
+
+    name = request.POST.get('name', '').strip()
+    date_str = request.POST.get('date', '').strip()
+    description = request.POST.get('description', '').strip()
+    is_optional = request.POST.get('is_optional') == 'on'
+
+    if not name or not date_str:
+        return HttpResponse(
+            '<div class="alert alert-danger">Holiday name and date are required.</div>',
+            status=400
+        )
+
+    # Parse and validate date
+    try:
+        holiday_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return HttpResponse(
+            '<div class="alert alert-danger">Invalid date format.</div>',
+            status=400
+        )
+
+    try:
+        holiday = Holiday.objects.get(id=holiday_id)
+    except Holiday.DoesNotExist:
+        return HttpResponse(
+            '<div class="alert alert-danger">Holiday not found.</div>',
+            status=404
+        )
+
+    # Check if another holiday has this date
+    if Holiday.objects.filter(date=holiday_date).exclude(id=holiday_id).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">A holiday already exists for this date.</div>',
+            status=400
+        )
+
+    # Update holiday
+    holiday.name = name
+    holiday.date = holiday_date
+    holiday.description = description
+    holiday.is_optional = is_optional
+    holiday.save()
+
+    messages.success(request, f'Holiday "{name}" updated successfully!')
+
+    # Return HTMX response - redirect to refresh page
+    if request.headers.get('HX-Request'):
+        response = HttpResponse(status=200)
+        response['HX-Redirect'] = f'/settings/holidays/?year={holiday_date.year}'
+        return response
+
+    return redirect('frontend:holiday_list')
+
+
+@login_required
+@require_http_methods(["POST"])
+def holiday_delete_view(request, holiday_id):
+    """
+    Delete a holiday (HTMX endpoint)
+    """
+    if request.user.role != 'ADMIN':
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    from attendance.models import Holiday
+
+    try:
+        holiday = Holiday.objects.get(id=holiday_id)
+        holiday_name = holiday.name
+
+        holiday.delete()
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Holiday "{holiday_name}" deleted successfully!'
+        })
+
+    except Holiday.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Holiday not found.'
+        }, status=404)

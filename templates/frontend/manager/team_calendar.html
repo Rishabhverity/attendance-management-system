@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Team Leave Calendar - HR Leave Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- Page Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="bi bi-calendar3"></i> Team Leave Calendar</h2>
+                    <p class="text-muted">View team members' approved leaves</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'frontend:leave_approvals' %}" class="btn btn-outline-primary">
+                        <i class="bi bi-clipboard-check"></i> Approvals
+                    </a>
+                    <a href="{% url 'frontend:dashboard' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Dashboard
+                    </a>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <input type="hidden" name="month" value="{{ selected_month }}">
+                        <input type="hidden" name="year" value="{{ selected_year }}">
+
+                        <div class="col-md-4">
+                            <label for="employee" class="form-label">Employee</label>
+                            <select class="form-select" id="employee" name="employee" onchange="this.form.submit()">
+                                <option value="ALL" {% if employee_filter == 'ALL' %}selected{% endif %}>All Team Members</option>
+                                {% for member in team_members %}
+                                <option value="{{ member.id }}" {% if employee_filter == member.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ member.get_full_name|default:member.username }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="leave_type" class="form-label">Leave Type</label>
+                            <select class="form-select" id="leave_type" name="leave_type" onchange="this.form.submit()">
+                                <option value="ALL" {% if leave_type_filter == 'ALL' %}selected{% endif %}>All Leave Types</option>
+                                {% for lt in leave_types %}
+                                <option value="{{ lt.id }}" {% if leave_type_filter == lt.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ lt.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-4 d-flex align-items-end">
+                            <a href="{% url 'frontend:team_leaves' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Clear Filters
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Calendar -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ month_name }} {{ selected_year }}</h5>
+                    <div class="btn-group" role="group">
+                        <a href="?month={{ prev_month }}&year={{ prev_year }}&employee={{ employee_filter }}&leave_type={{ leave_type_filter }}"
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-chevron-left"></i> Previous
+                        </a>
+                        <a href="?month={{ today.month }}&year={{ today.year }}&employee={{ employee_filter }}&leave_type={{ leave_type_filter }}"
+                           class="btn btn-sm btn-outline-secondary">
+                            Today
+                        </a>
+                        <a href="?month={{ next_month }}&year={{ next_year }}&employee={{ employee_filter }}&leave_type={{ leave_type_filter }}"
+                           class="btn btn-sm btn-outline-secondary">
+                            Next <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-bordered mb-0" style="table-layout: fixed;">
+                            <thead>
+                                <tr class="text-center">
+                                    {% for weekday in weekdays %}
+                                    <th class="p-2" style="width: 14.28%;">{{ weekday }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for week in calendar_data %}
+                                <tr>
+                                    {% for day_info in week %}
+                                    <td class="calendar-day p-2
+                                        {% if day_info %}
+                                            {% if day_info.is_today %}today{% endif %}
+                                            {% if day_info.is_weekend %}weekend{% endif %}
+                                            {% if day_info.is_holiday %}holiday{% endif %}
+                                        {% endif %}"
+                                        style="min-height: 100px; vertical-align: top;">
+                                        {% if day_info %}
+                                        <div class="d-flex flex-column h-100">
+                                            <!-- Date -->
+                                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                                <strong class="{% if day_info.is_today %}text-primary{% endif %}">
+                                                    {{ day_info.day }}
+                                                </strong>
+                                                {% if day_info.is_today %}
+                                                <span class="badge bg-primary badge-sm"style="font-size: 0.7rem;">Now</span>
+                                                {% endif %}
+                                            </div>
+
+                                            <!-- Holiday -->
+                                            {% if day_info.is_holiday %}
+                                            <div class="mt-1">
+                                                <span class="badge bg-danger d-block text-truncate small"
+                                                      data-bs-toggle="tooltip"
+                                                      title="{{ day_info.holiday.name }}">
+                                                    <i class="bi bi-calendar-star"></i> Holiday
+                                                </span>
+                                            </div>
+                                            {% endif %}
+
+                                            <!-- Leaves on this date -->
+                                            {% for leave in day_info.leaves %}
+                                            <div class="mt-1">
+                                                <span class="badge badge-on-leave d-block text-truncate small"
+                                                      data-bs-toggle="tooltip"
+                                                      title="{{ leave.employee.get_full_name|default:leave.employee.username }} - {{ leave.leave_type.name }}">
+                                                    <i class="bi bi-person"></i> {{ leave.employee.first_name|default:leave.employee.username|truncatechars:8 }}
+                                                </span>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Legend -->
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h6 class="card-title mb-3"><i class="bi bi-info-circle"></i> Legend</h6>
+                    <div class="row g-2 small">
+                        <div class="col-md-3">
+                            <span class="badge badge-on-leave">Employee on Leave</span>
+                        </div>
+                        <div class="col-md-3">
+                            <span class="badge bg-danger">Holiday</span>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border border-warning p-1 d-inline-block">Today</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="bg-secondary bg-opacity-10 p-1 d-inline-block">Weekend</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Initialize Bootstrap tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+</script>
+{% endblock %}
