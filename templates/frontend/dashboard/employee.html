@@ -1,0 +1,225 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Employee Dashboard - HR Leave Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Welcome Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2>Welcome, {{ user.first_name|default:user.username }}!</h2>
+            <p class="text-muted">Employee ID: {{ user.employee_id }}</p>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-md-6 col-lg-3 mb-3">
+            <a href="{% url 'frontend:leave_apply' %}" class="btn btn-primary btn-lg w-100 py-3">
+                <i class="bi bi-calendar-plus fs-3 d-block mb-2"></i>
+                <span>Apply Leave</span>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3 mb-3">
+            <a href="{% url 'frontend:mark_attendance' %}" class="btn btn-success btn-lg w-100 py-3">
+                <i class="bi bi-check-circle fs-3 d-block mb-2"></i>
+                <span>Mark Attendance</span>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3 mb-3">
+            <a href="{% url 'frontend:my_leaves' %}" class="btn btn-info btn-lg w-100 py-3">
+                <i class="bi bi-calendar-event fs-3 d-block mb-2"></i>
+                <span>My Leaves</span>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3 mb-3">
+            <a href="{% url 'frontend:my_attendance' %}" class="btn btn-warning btn-lg w-100 py-3">
+                <i class="bi bi-clock-history fs-3 d-block mb-2"></i>
+                <span>My Attendance</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Leave Balances -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3"><i class="bi bi-calendar-check"></i> Leave Balance {{ "now"|date:"Y" }}</h4>
+        </div>
+        {% if balances %}
+            {% for balance in balances %}
+            <div class="col-md-6 col-lg-3 mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted text-uppercase">{{ balance.leave_type.name }}</h6>
+                        <h2 class="mb-0">
+                            {{ balance.available|floatformat:0 }}
+                            <small class="text-muted fs-6">/ {{ balance.allocated|floatformat:0 }}</small>
+                        </h2>
+                        <div class="progress mt-3" style="height: 8px;">
+                            {% widthratio balance.available balance.allocated 100 as percentage %}
+                            <div class="progress-bar
+                                {% if percentage > 50 %}bg-success
+                                {% elif percentage > 20 %}bg-warning
+                                {% else %}bg-danger{% endif %}"
+                                 role="progressbar"
+                                 style="width: {{ percentage }}%"
+                                 aria-valuenow="{{ balance.available }}"
+                                 aria-valuemin="0"
+                                 aria-valuemax="{{ balance.allocated }}">
+                            </div>
+                        </div>
+                        <small class="text-muted mt-2 d-block">
+                            Used: {{ balance.used|floatformat:0 }}
+                            {% if balance.adjusted != 0 %}
+                                | Adjusted: {{ balance.adjusted|floatformat:0 }}
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> No leave balance allocated yet. Please contact HR.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Attendance Stats -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3"><i class="bi bi-clock"></i> Attendance This Month</h4>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stat-card success">
+                <h3>{{ attendance_stats.present|default:0 }}</h3>
+                <p>Days Present</p>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stat-card info">
+                <h3>{{ attendance_stats.wfh|default:0 }}</h3>
+                <p>Work From Home</p>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stat-card warning">
+                <h3>{{ attendance_stats.half_day|default:0 }}</h3>
+                <p>Half Days</p>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stat-card primary">
+                <h3>{{ attendance_stats.total|default:0 }}</h3>
+                <p>Total Days Marked</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Leaves & Upcoming Holidays -->
+    <div class="row">
+        <!-- Recent Leave Requests -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-calendar-event"></i> Recent Leave Requests</h5>
+                    {% if pending_leaves_count > 0 %}
+                        <span class="badge bg-warning">{{ pending_leaves_count }} Pending</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if recent_leaves %}
+                        <div class="list-group list-group-flush">
+                            {% for leave in recent_leaves %}
+                            <div class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong>{{ leave.leave_type.name }}</strong>
+                                        <br>
+                                        <small class="text-muted">
+                                            <i class="bi bi-calendar"></i>
+                                            {{ leave.start_date|date:"M d" }} - {{ leave.end_date|date:"M d, Y" }}
+                                            ({{ leave.total_days }} day{% if leave.total_days != 1 %}s{% endif %})
+                                        </small>
+                                    </div>
+                                    <span class="badge badge-{{ leave.status|lower }}">
+                                        {{ leave.get_status_display }}
+                                    </span>
+                                </div>
+                                {% if leave.reason %}
+                                <small class="text-muted d-block mt-1">
+                                    {{ leave.reason|truncatewords:15 }}
+                                </small>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">No leave requests yet.</p>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-white">
+                    <a href="{% url 'frontend:my_leaves' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-eye"></i> View All Leaves
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upcoming Holidays -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-calendar-star"></i> Upcoming Holidays</h5>
+                </div>
+                <div class="card-body">
+                    {% if upcoming_holidays %}
+                        <div class="list-group list-group-flush">
+                            {% for holiday in upcoming_holidays %}
+                            <div class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ holiday.name }}</strong>
+                                        <br>
+                                        <small class="text-muted">
+                                            <i class="bi bi-calendar3"></i>
+                                            {{ holiday.date|date:"l, F d, Y" }}
+                                        </small>
+                                        {% if holiday.description %}
+                                        <br>
+                                        <small class="text-muted">{{ holiday.description }}</small>
+                                        {% endif %}
+                                    </div>
+                                    {% if holiday.is_optional %}
+                                    <span class="badge bg-info">Optional</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">No upcoming holidays.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance Status Alert -->
+    {% if not attendance_marked_today %}
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle"></i>
+                <strong>Reminder:</strong> You haven't marked your attendance for today yet.
+                <a href="{% url 'frontend:mark_attendance' %}" class="alert-link">Mark Attendance Now</a>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

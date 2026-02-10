@@ -1,0 +1,303 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Mark Attendance - HR Leave Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-lg-10 mx-auto">
+            <!-- Page Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="bi bi-calendar-check"></i> Mark Attendance</h2>
+                    <p class="text-muted">Record your attendance for {{ today|date:"F d, Y" }}</p>
+                </div>
+                <a href="{% url 'frontend:dashboard' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+
+            <div class="row">
+                <!-- Mark Attendance Section -->
+                <div class="col-lg-7 mb-4">
+                    <!-- Holiday/Leave Alert -->
+                    {% if is_holiday %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-calendar-star"></i>
+                        <strong>Holiday:</strong> {{ is_holiday.name }} - No need to mark attendance
+                    </div>
+                    {% elif on_leave %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-calendar-x"></i>
+                        <strong>On Leave:</strong> You have an approved {{ on_leave.leave_type.name }} leave today
+                    </div>
+                    {% endif %}
+
+                    <!-- Attendance Form Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-clock-history"></i>
+                                {% if existing_attendance %}
+                                    Update Today's Attendance
+                                {% else %}
+                                    Mark Today's Attendance
+                                {% endif %}
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Display messages -->
+                            <div id="attendance-messages">
+                                {% if messages %}
+                                    {% for message in messages %}
+                                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                    </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+
+                            {% if existing_attendance %}
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i>
+                                Current Status: <strong>{{ existing_attendance.status }}</strong>
+                                (Marked at {{ existing_attendance.marked_at|date:"g:i A" }})
+                                {% if not existing_attendance.is_self_marked %}
+                                <br><small class="text-muted">* Marked by Admin - Cannot be updated</small>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+
+                            <form method="post"
+                                  hx-post="{% url 'frontend:mark_attendance' %}"
+                                  hx-target="#attendance-messages"
+                                  hx-swap="innerHTML">
+                                {% csrf_token %}
+
+                                <!-- Attendance Status Options -->
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <input type="radio"
+                                               class="btn-check"
+                                               name="status"
+                                               id="status-present"
+                                               value="PRESENT"
+                                               {% if existing_attendance.status == 'PRESENT' %}checked{% endif %}
+                                               required>
+                                        <label class="btn btn-outline-success w-100 py-3" for="status-present">
+                                            <i class="bi bi-check-circle" style="font-size: 2rem;"></i>
+                                            <div class="mt-2">
+                                                <strong>Present</strong>
+                                                <br>
+                                                <small>Full day at office</small>
+                                            </div>
+                                        </label>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <input type="radio"
+                                               class="btn-check"
+                                               name="status"
+                                               id="status-wfh"
+                                               value="WFH"
+                                               {% if existing_attendance.status == 'WFH' %}checked{% endif %}
+                                               required>
+                                        <label class="btn btn-outline-info w-100 py-3" for="status-wfh">
+                                            <i class="bi bi-house-door" style="font-size: 2rem;"></i>
+                                            <div class="mt-2">
+                                                <strong>Work From Home</strong>
+                                                <br>
+                                                <small>Remote working</small>
+                                            </div>
+                                        </label>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <input type="radio"
+                                               class="btn-check"
+                                               name="status"
+                                               id="status-half"
+                                               value="HALF_DAY"
+                                               {% if existing_attendance.status == 'HALF_DAY' %}checked{% endif %}
+                                               required>
+                                        <label class="btn btn-outline-warning w-100 py-3" for="status-half">
+                                            <i class="bi bi-clock" style="font-size: 2rem;"></i>
+                                            <div class="mt-2">
+                                                <strong>Half Day</strong>
+                                                <br>
+                                                <small>4 hours worked</small>
+                                            </div>
+                                        </label>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <input type="radio"
+                                               class="btn-check"
+                                               name="status"
+                                               id="status-absent"
+                                               value="ABSENT"
+                                               {% if existing_attendance.status == 'ABSENT' %}checked{% endif %}
+                                               required>
+                                        <label class="btn btn-outline-danger w-100 py-3" for="status-absent">
+                                            <i class="bi bi-x-circle" style="font-size: 2rem;"></i>
+                                            <div class="mt-2">
+                                                <strong>Absent</strong>
+                                                <br>
+                                                <small>Not working today</small>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Submit Button -->
+                                <div class="mt-4">
+                                    <button type="submit"
+                                            class="btn btn-primary btn-lg w-100"
+                                            {% if existing_attendance and not existing_attendance.is_self_marked %}disabled{% endif %}>
+                                        <i class="bi bi-save"></i>
+                                        {% if existing_attendance %}Update{% else %}Mark{% endif %} Attendance
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Information Card -->
+                    <div class="card mt-3">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="bi bi-info-circle"></i> Important Information</h6>
+                            <ul class="mb-0 small">
+                                <li>Attendance can only be marked for today</li>
+                                <li>You can update your attendance anytime during the day</li>
+                                <li>Admin-marked attendance cannot be modified</li>
+                                <li>Weekends and holidays are automatically excluded</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Stats Sidebar -->
+                <div class="col-lg-5">
+                    <!-- Monthly Summary -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-calendar3"></i> This Month Summary
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-6">
+                                    <div class="card h-100 bg-light">
+                                        <div class="card-body text-center">
+                                            <h3 class="text-success">{{ monthly_stats.present|default:0 }}</h3>
+                                            <small class="text-muted">Present</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card h-100 bg-light">
+                                        <div class="card-body text-center">
+                                            <h3 class="text-info">{{ monthly_stats.wfh|default:0 }}</h3>
+                                            <small class="text-muted">WFH</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card h-100 bg-light">
+                                        <div class="card-body text-center">
+                                            <h3 class="text-warning">{{ monthly_stats.half_day|default:0 }}</h3>
+                                            <small class="text-muted">Half Day</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card h-100 bg-light">
+                                        <div class="card-body text-center">
+                                            <h3 class="text-danger">{{ monthly_stats.absent|default:0 }}</h3>
+                                            <small class="text-muted">Absent</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-3 pt-3 border-top">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Total Days Marked:</strong>
+                                    <strong class="text-primary">{{ monthly_stats.total|default:0 }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Attendance History -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-list-ul"></i> Recent History
+                            </h5>
+                        </div>
+                        <div class="card-body p-0">
+                            {% if attendance_history %}
+                            <div class="list-group list-group-flush">
+                                {% for attendance in attendance_history|slice:":10" %}
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>{{ attendance.date|date:"M d, Y" }}</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                {{ attendance.marked_at|date:"g:i A" }}
+                                            </small>
+                                        </div>
+                                        <div class="text-end">
+                                            {% if attendance.status == 'PRESENT' %}
+                                            <span class="badge badge-present">Present</span>
+                                            {% elif attendance.status == 'WFH' %}
+                                            <span class="badge bg-info">WFH</span>
+                                            {% elif attendance.status == 'HALF_DAY' %}
+                                            <span class="badge badge-half-day">Half Day</span>
+                                            {% elif attendance.status == 'ABSENT' %}
+                                            <span class="badge badge-absent">Absent</span>
+                                            {% endif %}
+                                            <br>
+                                            {% if not attendance.is_self_marked %}
+                                            <small class="text-muted">By Admin</small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div class="card-footer text-center">
+                                <a href="{% url 'frontend:my_attendance' %}" class="btn btn-sm btn-outline-primary">
+                                    View Full History <i class="bi bi-arrow-right"></i>
+                                </a>
+                            </div>
+                            {% else %}
+                            <div class="p-4 text-center text-muted">
+                                <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                                <p class="mt-2 mb-0">No attendance history yet</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-refresh messages after HTMX request
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        if (evt.detail.successful && evt.detail.pathInfo.requestPath.includes('mark')) {
+            // Refresh the page after 1 second to show updated status
+            setTimeout(function() {
+                location.reload();
+            }, 1000);
+        }
+    });
+</script>
+{% endblock %}

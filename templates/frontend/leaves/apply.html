@@ -1,0 +1,210 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Apply for Leave - HR Leave Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <!-- Page Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="bi bi-calendar-plus"></i> Apply for Leave</h2>
+                    <p class="text-muted">Submit a new leave application</p>
+                </div>
+                <a href="{% url 'frontend:dashboard' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+
+            <!-- Leave Balance Display -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-wallet2"></i> Your Leave Balance</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for balance in balances %}
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h6 class="text-muted">{{ balance.leave_type.name }}</h6>
+                                    <h3 class="mb-0">
+                                        {% widthratio balance.allocated|add:balance.adjusted 1 1 %}{% widthratio balance.used 1 -1 %}
+                                        <small class="text-muted">/ {{ balance.allocated|add:balance.adjusted }} days</small>
+                                    </h3>
+                                    <div class="progress mt-2" style="height: 8px;">
+                                        {% widthratio balance.used balance.allocated|add:balance.adjusted 100 as used_percent %}
+                                        <div class="progress-bar bg-primary" role="progressbar" style="width: {{ used_percent }}%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="col-12">
+                            <p class="text-muted mb-0">No leave balance allocated yet.</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Leave Application Form -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Leave Application Form</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Response messages area (HTMX target) -->
+                    <div id="form-messages"></div>
+
+                    <!-- Display Django messages -->
+                    {% if messages %}
+                        {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <form method="post"
+                          enctype="multipart/form-data"
+                          hx-post="{% url 'frontend:leave_apply' %}"
+                          hx-target="#form-messages"
+                          hx-swap="innerHTML">
+                        {% csrf_token %}
+
+                        <!-- Leave Type -->
+                        <div class="mb-3">
+                            <label for="leave_type" class="form-label">Leave Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="leave_type" name="leave_type" required>
+                                <option value="">Select leave type...</option>
+                                {% for leave_type in leave_types %}
+                                <option value="{{ leave_type.id }}">
+                                    {{ leave_type.name }} ({{ leave_type.code }})
+                                    {% if not leave_type.is_paid %} - Unpaid{% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">
+                                Select the type of leave you want to apply for
+                            </small>
+                        </div>
+
+                        <!-- Date Range -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="start_date" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                <input type="date"
+                                       class="form-control"
+                                       id="start_date"
+                                       name="start_date"
+                                       min="{{ today|date:'Y-m-d' }}"
+                                       required>
+                                <small class="form-text text-muted">First day of leave</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="end_date" class="form-label">End Date <span class="text-danger">*</span></label>
+                                <input type="date"
+                                       class="form-control"
+                                       id="end_date"
+                                       name="end_date"
+                                       min="{{ today|date:'Y-m-d' }}"
+                                       required>
+                                <small class="form-text text-muted">Last day of leave</small>
+                            </div>
+                        </div>
+
+                        <!-- Reason -->
+                        <div class="mb-3">
+                            <label for="reason" class="form-label">Reason <span class="text-danger">*</span></label>
+                            <textarea class="form-control"
+                                      id="reason"
+                                      name="reason"
+                                      rows="4"
+                                      placeholder="Please provide a reason for your leave..."
+                                      required></textarea>
+                            <small class="form-text text-muted">
+                                Provide a clear reason for your leave request
+                            </small>
+                        </div>
+
+                        <!-- Attachment (Optional) -->
+                        <div class="mb-4">
+                            <label for="attachment" class="form-label">
+                                Attachment <small class="text-muted">(Optional)</small>
+                            </label>
+                            <input class="form-control"
+                                   type="file"
+                                   id="attachment"
+                                   name="attachment"
+                                   accept=".pdf,.jpg,.jpeg,.png">
+                            <small class="form-text text-muted">
+                                Upload supporting documents (PDF, JPG, PNG - Max 5MB)
+                            </small>
+                        </div>
+
+                        <!-- Form Actions -->
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-send"></i> Submit Leave Application
+                            </button>
+                            <button type="reset" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Clear Form
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Information Card -->
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-info-circle"></i> Important Information</h6>
+                    <ul class="mb-0 small">
+                        <li>Leave applications require manager approval</li>
+                        <li>Working days calculation excludes weekends and holidays</li>
+                        <li>Past date applications are not allowed</li>
+                        <li>Ensure sufficient leave balance before applying for paid leaves</li>
+                        <li>You can cancel pending leave requests from "My Leaves" page</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Date validation - ensure end date is after start date
+    document.getElementById('start_date').addEventListener('change', function() {
+        const startDate = this.value;
+        const endDateInput = document.getElementById('end_date');
+
+        if (startDate) {
+            endDateInput.min = startDate;
+
+            // Reset end date if it's before start date
+            if (endDateInput.value && endDateInput.value < startDate) {
+                endDateInput.value = startDate;
+            }
+        }
+    });
+
+    // Form validation feedback
+    document.addEventListener('htmx:afterRequest', function(evt) {
+        if (evt.detail.successful) {
+            // Clear form on success
+            if (evt.detail.xhr.status === 200 && evt.detail.target.id === 'form-messages') {
+                // Check if success message
+                if (evt.detail.xhr.responseText.includes('alert-success')) {
+                    setTimeout(function() {
+                        document.querySelector('form').reset();
+                    }, 1000);
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

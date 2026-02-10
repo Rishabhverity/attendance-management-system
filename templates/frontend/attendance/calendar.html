@@ -1,0 +1,269 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}My Attendance Calendar - HR Leave Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- Page Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="bi bi-calendar3"></i> My Attendance Calendar</h2>
+                    <p class="text-muted">View your attendance history</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'frontend:mark_attendance' %}" class="btn btn-primary">
+                        <i class="bi bi-clock-history"></i> Mark Attendance
+                    </a>
+                    <a href="{% url 'frontend:dashboard' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Calendar Section -->
+                <div class="col-lg-9">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">{{ month_name }} {{ selected_year }}</h5>
+                            <div class="btn-group" role="group">
+                                <a href="?month={{ prev_month }}&year={{ prev_year }}"
+                                   class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-chevron-left"></i> Previous
+                                </a>
+                                <a href="?month={{ today.month }}&year={{ today.year }}"
+                                   class="btn btn-sm btn-outline-secondary">
+                                    Today
+                                </a>
+                                <a href="?month={{ next_month }}&year={{ next_year }}"
+                                   class="btn btn-sm btn-outline-secondary">
+                                    Next <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-bordered mb-0" style="table-layout: fixed;">
+                                    <thead>
+                                        <tr class="text-center">
+                                            {% for weekday in weekdays %}
+                                            <th class="p-2" style="width: 14.28%;">{{ weekday }}</th>
+                                            {% endfor %}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for week in calendar_data %}
+                                        <tr>
+                                            {% for day_info in week %}
+                                            <td class="calendar-day p-2
+                                                {% if day_info %}
+                                                    {% if day_info.is_today %}today{% endif %}
+                                                    {% if day_info.is_weekend %}weekend{% endif %}
+                                                    {% if day_info.is_holiday %}holiday{% endif %}
+                                                {% endif %}"
+                                                style="min-height: 100px; vertical-align: top;">
+                                                {% if day_info %}
+                                                <div class="d-flex flex-column h-100">
+                                                    <!-- Date -->
+                                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                                        <strong class="{% if day_info.is_today %}text-primary{% endif %}">
+                                                            {{ day_info.day }}
+                                                        </strong>
+                                                        {% if day_info.is_today %}
+                                                        <span class="badge bg-primary badge-sm">Today</span>
+                                                        {% endif %}
+                                                    </div>
+
+                                                    <!-- Status -->
+                                                    {% if day_info.is_holiday %}
+                                                    <div class="mt-1">
+                                                        <span class="badge bg-danger d-block text-truncate"
+                                                              data-bs-toggle="tooltip"
+                                                              title="{{ day_info.holiday.name }}">
+                                                            <i class="bi bi-calendar-star"></i> Holiday
+                                                        </span>
+                                                    </div>
+                                                    {% elif day_info.is_on_leave %}
+                                                    <div class="mt-1">
+                                                        <span class="badge badge-on-leave d-block text-truncate"
+                                                              data-bs-toggle="tooltip"
+                                                              title="{{ day_info.leave.leave_type.name }}">
+                                                            <i class="bi bi-calendar-x"></i> On Leave
+                                                        </span>
+                                                    </div>
+                                                    {% elif day_info.attendance %}
+                                                    <div class="mt-1">
+                                                        {% if day_info.attendance.status == 'PRESENT' %}
+                                                        <span class="badge badge-present d-block">
+                                                            <i class="bi bi-check-circle"></i> Present
+                                                        </span>
+                                                        {% elif day_info.attendance.status == 'WFH' %}
+                                                        <span class="badge bg-info d-block">
+                                                            <i class="bi bi-house-door"></i> WFH
+                                                        </span>
+                                                        {% elif day_info.attendance.status == 'HALF_DAY' %}
+                                                        <span class="badge badge-half-day d-block">
+                                                            <i class="bi bi-clock"></i> Half Day
+                                                        </span>
+                                                        {% elif day_info.attendance.status == 'ABSENT' %}
+                                                        <span class="badge badge-absent d-block">
+                                                            <i class="bi bi-x-circle"></i> Absent
+                                                        </span>
+                                                        {% endif %}
+                                                    </div>
+                                                    {% elif day_info.is_weekend %}
+                                                    <div class="mt-1">
+                                                        <span class="badge bg-secondary d-block">Weekend</span>
+                                                    </div>
+                                                    {% elif day_info.date < today %}
+                                                    <div class="mt-1">
+                                                        <span class="badge bg-light text-dark d-block">Not Marked</span>
+                                                    </div>
+                                                    {% endif %}
+                                                </div>
+                                                {% endif %}
+                                            </td>
+                                            {% endfor %}
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Legend -->
+                    <div class="card mt-3">
+                        <div class="card-body">
+                            <h6 class="card-title mb-3"><i class="bi bi-info-circle"></i> Legend</h6>
+                            <div class="row g-2 small">
+                                <div class="col-md-3">
+                                    <span class="badge badge-present">Present</span> Full day at office
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="badge bg-info">WFH</span> Work from home
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="badge badge-half-day">Half Day</span> 4 hours worked
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="badge badge-absent">Absent</span> Not present
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="badge badge-on-leave">On Leave</span> Approved leave
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="badge bg-danger">Holiday</span> Public holiday
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="badge bg-secondary">Weekend</span> Saturday/Sunday
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border border-warning p-1 d-inline-block">Today</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Stats Sidebar -->
+                <div class="col-lg-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Monthly Summary</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Present</span>
+                                    <strong class="text-success">{{ monthly_stats.present|default:0 }}</strong>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    {% widthratio monthly_stats.present 30 100 as present_percent %}
+                                    <div class="progress-bar bg-success"
+                                         role="progressbar"
+                                         style="width: {{ present_percent }}%"></div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>WFH</span>
+                                    <strong class="text-info">{{ monthly_stats.wfh|default:0 }}</strong>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    {% widthratio monthly_stats.wfh 30 100 as wfh_percent %}
+                                    <div class="progress-bar bg-info"
+                                         role="progressbar"
+                                         style="width: {{ wfh_percent }}%"></div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Half Day</span>
+                                    <strong class="text-warning">{{ monthly_stats.half_day|default:0 }}</strong>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    {% widthratio monthly_stats.half_day 30 100 as half_percent %}
+                                    <div class="progress-bar bg-warning"
+                                         role="progressbar"
+                                         style="width: {{ half_percent }}%"></div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Absent</span>
+                                    <strong class="text-danger">{{ monthly_stats.absent|default:0 }}</strong>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    {% widthratio monthly_stats.absent 30 100 as absent_percent %}
+                                    <div class="progress-bar bg-danger"
+                                         role="progressbar"
+                                         style="width: {{ absent_percent }}%"></div>
+                                </div>
+                            </div>
+
+                            <div class="pt-3 border-top">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <strong>Total Days Marked:</strong>
+                                    <strong class="text-primary">{{ monthly_stats.total|default:0 }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Quick Actions</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <a href="{% url 'frontend:mark_attendance' %}" class="btn btn-sm btn-primary">
+                                    <i class="bi bi-clock-history"></i> Mark Attendance
+                                </a>
+                                <a href="{% url 'frontend:leave_apply' %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-calendar-plus"></i> Apply for Leave
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Initialize Bootstrap tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+</script>
+{% endblock %}

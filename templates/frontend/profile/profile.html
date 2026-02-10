@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}My Profile - HR Leave Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <!-- Page Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="bi bi-person-circle"></i> My Profile</h2>
+                    <p class="text-muted">View and update your profile information</p>
+                </div>
+                <a href="{% url 'frontend:dashboard' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+
+            <div class="row">
+                <!-- Profile Information -->
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-person"></i> Personal Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Display messages -->
+                            <div id="profile-messages">
+                                {% if messages %}
+                                    {% for message in messages %}
+                                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                    </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+
+                            <form method="post"
+                                  hx-post="{% url 'frontend:profile' %}"
+                                  hx-target="#profile-messages"
+                                  hx-swap="innerHTML">
+                                {% csrf_token %}
+
+                                <!-- Name Fields -->
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="first_name" class="form-label">First Name</label>
+                                        <input type="text"
+                                               class="form-control"
+                                               id="first_name"
+                                               name="first_name"
+                                               value="{{ user.first_name }}"
+                                               required>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="last_name" class="form-label">Last Name</label>
+                                        <input type="text"
+                                               class="form-control"
+                                               id="last_name"
+                                               name="last_name"
+                                               value="{{ user.last_name }}"
+                                               required>
+                                    </div>
+                                </div>
+
+                                <!-- Contact Information -->
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email Address</label>
+                                    <input type="email"
+                                           class="form-control"
+                                           id="email"
+                                           name="email"
+                                           value="{{ user.email }}"
+                                           required>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="phone_number" class="form-label">Phone Number</label>
+                                    <input type="tel"
+                                           class="form-control"
+                                           id="phone_number"
+                                           name="phone_number"
+                                           value="{{ employee_profile.phone_number }}"
+                                           placeholder="+1 (555) 123-4567">
+                                </div>
+
+                                <!-- Read-only Fields -->
+                                <div class="mb-3">
+                                    <label for="username" class="form-label">Username</label>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="username"
+                                           value="{{ user.username }}"
+                                           disabled>
+                                    <small class="form-text text-muted">Username cannot be changed</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="employee_id" class="form-label">Employee ID</label>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="employee_id"
+                                           value="{{ user.employee_id }}"
+                                           disabled>
+                                </div>
+
+                                <!-- Submit Button -->
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-save"></i> Save Changes
+                                    </button>
+                                    <button type="reset" class="btn btn-outline-secondary">
+                                        <i class="bi bi-x-circle"></i> Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Change Password Card -->
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-shield-lock"></i> Security</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Keep your account secure by changing your password regularly.</p>
+                            <a href="{% url 'frontend:change_password' %}" class="btn btn-outline-primary">
+                                <i class="bi bi-key"></i> Change Password
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Profile Summary Sidebar -->
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Profile Summary</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center mb-3">
+                                <div class="avatar-circle mx-auto mb-3">
+                                    <i class="bi bi-person-fill" style="font-size: 4rem;"></i>
+                                </div>
+                                <h5>{{ user.get_full_name|default:user.username }}</h5>
+                                <p class="text-muted mb-1">
+                                    <i class="bi bi-person-badge"></i> {{ user.employee_id }}
+                                </p>
+                                <p class="text-muted mb-0">
+                                    <span class="badge bg-primary">{{ user.get_role_display }}</span>
+                                </p>
+                            </div>
+
+                            <hr>
+
+                            <div class="mb-3">
+                                <small class="text-muted d-block mb-1">Department</small>
+                                <strong>
+                                    {% if employee_profile.department %}
+                                        {{ employee_profile.department.name }}
+                                    {% else %}
+                                        <span class="text-muted">Not assigned</span>
+                                    {% endif %}
+                                </strong>
+                            </div>
+
+                            <div class="mb-3">
+                                <small class="text-muted d-block mb-1">Designation</small>
+                                <strong>
+                                    {% if employee_profile.designation %}
+                                        {{ employee_profile.designation.title }}
+                                    {% else %}
+                                        <span class="text-muted">Not assigned</span>
+                                    {% endif %}
+                                </strong>
+                            </div>
+
+                            {% if employee_profile.reporting_manager %}
+                            <div class="mb-3">
+                                <small class="text-muted d-block mb-1">Reporting Manager</small>
+                                <strong>{{ employee_profile.reporting_manager.get_full_name|default:employee_profile.reporting_manager.username }}</strong>
+                            </div>
+                            {% endif %}
+
+                            <div class="mb-3">
+                                <small class="text-muted d-block mb-1">Date of Joining</small>
+                                <strong>
+                                    {% if employee_profile.date_of_joining %}
+                                        {{ employee_profile.date_of_joining|date:"M d, Y" }}
+                                    {% else %}
+                                        <span class="text-muted">Not set</span>
+                                    {% endif %}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <small class="text-muted d-block mb-1">Status</small>
+                                {% if employee_profile.is_active %}
+                                    <span class="badge bg-success">Active</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.avatar-circle {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+</style>
+
+<script>
+    // Auto-hide success messages after 3 seconds
+    document.addEventListener('htmx:afterRequest', function(evt) {
+        if (evt.detail.successful && evt.detail.xhr.responseText.includes('alert-success')) {
+            setTimeout(function() {
+                const alerts = document.querySelectorAll('.alert-success');
+                alerts.forEach(alert => {
+                    const bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                });
+            }, 3000);
+        }
+    });
+</script>
+{% endblock %}

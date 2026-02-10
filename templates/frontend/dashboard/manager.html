@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Manager Dashboard - HR Leave Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Welcome Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2>Manager Dashboard</h2>
+            <p class="text-muted">Welcome, {{ user.first_name|default:user.username }} - Team Management</p>
+        </div>
+    </div>
+
+    <!-- Team Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="stat-card primary">
+                <h3>{{ team_size }}</h3>
+                <p><i class="bi bi-people"></i> Team Members</p>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stat-card warning">
+                <h3>{{ pending_approvals }}</h3>
+                <p><i class="bi bi-clock"></i> Pending Approvals</p>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stat-card info">
+                <h3>{{ team_on_leave_today.count }}</h3>
+                <p><i class="bi bi-calendar-x"></i> Team on Leave Today</p>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stat-card success">
+                <h3>{{ team_attendance_today.present|default:0 }}</h3>
+                <p><i class="bi bi-check-circle"></i> Team Present Today</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3"><i class="bi bi-lightning"></i> Quick Actions</h4>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{% url 'frontend:leave_approvals' %}" class="btn btn-warning btn-lg w-100">
+                <i class="bi bi-clipboard-check"></i> Pending Approvals
+                {% if pending_approvals > 0 %}
+                <span class="badge bg-danger">{{ pending_approvals }}</span>
+                {% endif %}
+            </a>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{% url 'frontend:team_leaves' %}" class="btn btn-info btn-lg w-100">
+                <i class="bi bi-calendar-event"></i> Team Calendar
+            </a>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{% url 'frontend:team_attendance' %}" class="btn btn-primary btn-lg w-100">
+                <i class="bi bi-clock-history"></i> Team Attendance
+            </a>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{% url 'frontend:team_reports' %}" class="btn btn-success btn-lg w-100">
+                <i class="bi bi-graph-up"></i> Team Reports
+            </a>
+        </div>
+    </div>
+
+    <!-- Team on Leave & Upcoming Team Leaves -->
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-calendar-x"></i> Team on Leave Today</h5>
+                </div>
+                <div class="card-body">
+                    {% if team_on_leave_today %}
+                        <div class="list-group list-group-flush">
+                            {% for leave in team_on_leave_today %}
+                            <div class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ leave.employee.user.get_full_name|default:leave.employee.user.username }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ leave.leave_type.name }}</small>
+                                    </div>
+                                    <span class="badge bg-warning">On Leave</span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">No team members on leave today.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-calendar-range"></i> Upcoming Team Leaves</h5>
+                </div>
+                <div class="card-body">
+                    {% if upcoming_team_leaves %}
+                        <div class="list-group list-group-flush">
+                            {% for leave in upcoming_team_leaves %}
+                            <div class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong>{{ leave.employee.user.get_full_name|default:leave.employee.user.username }}</strong>
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ leave.leave_type.name }} •
+                                            {{ leave.start_date|date:"M d" }} - {{ leave.end_date|date:"M d" }}
+                                        </small>
+                                    </div>
+                                    <span class="badge badge-approved">Approved</span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">No upcoming team leaves.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Team Attendance Today -->
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-people-fill"></i> Team Attendance Summary (Today)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <h3 class="text-success">{{ team_attendance_today.present|default:0 }}</h3>
+                            <p class="text-muted mb-0">Present</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h3 class="text-info">{{ team_attendance_today.wfh|default:0 }}</h3>
+                            <p class="text-muted mb-0">Work From Home</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h3 class="text-danger">{{ team_attendance_today.absent|default:0 }}</h3>
+                            <p class="text-muted mb-0">Absent</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h3 class="text-primary">{{ team_size }}</h3>
+                            <p class="text-muted mb-0">Total Team</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
