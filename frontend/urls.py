@@ -3,7 +3,7 @@ URL Configuration for frontend app
 """
 from django.urls import path
 from django.contrib.auth.views import LoginView, LogoutView
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, RedirectView
 from . import views
 
 app_name = 'frontend'
@@ -14,6 +14,9 @@ def placeholder_view(request):
     return HttpResponse("<h1>Coming Soon</h1><p>This page will be implemented in the next phase.</p><br><a href='/dashboard/'>Back to Dashboard</a>")
 
 urlpatterns = [
+    # Root redirect
+    path('', RedirectView.as_view(pattern_name='frontend:login', permanent=False), name='home'),
+
     # Authentication
     path('login/', LoginView.as_view(template_name='registration/login.html'), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
@@ -30,7 +33,12 @@ urlpatterns = [
     path('leaves/my-leaves/', views.my_leaves_view, name='my_leaves'),
     path('leaves/<int:leave_id>/cancel/', views.cancel_leave_request, name='cancel_leave'),
     path('leaves/balance/', placeholder_view, name='leave_balance'),
-    path('leaves/approvals/', placeholder_view, name='leave_approvals'),
+
+    # Manager Leave Approvals
+    path('leaves/approvals/', views.leave_approvals_view, name='leave_approvals'),
+    path('leaves/<int:leave_id>/approve/', views.approve_leave_request, name='approve_leave'),
+    path('leaves/<int:leave_id>/reject/', views.reject_leave_request, name='reject_leave'),
+
     path('leaves/team-calendar/', placeholder_view, name='team_leaves'),
 
     # Attendance Management

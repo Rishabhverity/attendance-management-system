@@ -46,25 +46,25 @@ def employee_dashboard(request):
     # Leave balances for current year
     current_year = timezone.now().year
     balances = LeaveBalance.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         year=current_year
     ).select_related('leave_type')
 
     # Recent leave requests
     recent_leaves = LeaveRequest.objects.filter(
-        employee=employee_profile
+        employee=request.user
     ).select_related('leave_type').order_by('-created_at')[:5]
 
     # Pending leave requests count
     pending_leaves_count = LeaveRequest.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         status='PENDING'
     ).count()
 
     # Attendance stats for current month
     today = timezone.now().date()
     attendance_stats = Attendance.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         date__month=today.month,
         date__year=today.year
     ).aggregate(
@@ -76,7 +76,7 @@ def employee_dashboard(request):
 
     # Check if attendance marked today
     attendance_marked_today = Attendance.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         date=today
     ).exists()
 
@@ -109,21 +109,21 @@ def manager_dashboard(request):
             employee_id=request.user.employee_id
         )
 
-    # Get team members
+    # Get team members (those who report to this manager)
     team_members = EmployeeProfile.objects.filter(
-        reporting_manager=employee_profile
+        reporting_manager=request.user
     ).select_related('user')
 
     # Pending approvals count
     pending_approvals = LeaveRequest.objects.filter(
-        employee__reporting_manager=employee_profile,
+        employee__profile__reporting_manager=request.user,
         status='PENDING'
     ).count()
 
     # Team on leave today
     today = timezone.now().date()
     team_on_leave_today = LeaveRequest.objects.filter(
-        employee__reporting_manager=employee_profile,
+        employee__profile__reporting_manager=request.user,
         status='APPROVED',
         start_date__lte=today,
         end_date__gte=today
@@ -131,7 +131,7 @@ def manager_dashboard(request):
 
     # Team attendance today
     team_attendance_today = Attendance.objects.filter(
-        employee__reporting_manager=employee_profile,
+        employee__profile__reporting_manager=request.user,
         date=today
     ).aggregate(
         present=Count('id', filter=Q(status='PRESENT')),
@@ -141,7 +141,7 @@ def manager_dashboard(request):
 
     # Upcoming team leaves
     upcoming_team_leaves = LeaveRequest.objects.filter(
-        employee__reporting_manager=employee_profile,
+        employee__profile__reporting_manager=request.user,
         status='APPROVED',
         start_date__gte=today
     ).select_related('employee', 'leave_type').order_by('start_date')[:5]
@@ -262,7 +262,7 @@ def apply_leave_view(request):
             if leave_type.is_paid:
                 try:
                     leave_balance = LeaveBalance.objects.get(
-                        employee=employee_profile,
+                        employee=request.user,
                         leave_type=leave_type,
                         year=start_date_obj.year
                     )
@@ -275,7 +275,7 @@ def apply_leave_view(request):
 
             # Check for overlapping leaves
             overlapping = LeaveRequest.objects.filter(
-                employee=employee_profile,
+                employee=request.user,
                 status__in=['PENDING', 'APPROVED']
             ).filter(
                 Q(start_date__lte=end_date_obj, end_date__gte=start_date_obj)
@@ -287,7 +287,7 @@ def apply_leave_view(request):
             # If no errors, create leave request
             if not errors:
                 leave_request = LeaveRequest.objects.create(
-                    employee=employee_profile,
+                    employee=request.user,
                     leave_type=leave_type,
                     start_date=start_date_obj,
                     end_date=end_date_obj,
@@ -331,7 +331,7 @@ def apply_leave_view(request):
     leave_types = LeaveType.objects.all()
     current_year = timezone.now().year
     balances = LeaveBalance.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         year=current_year
     ).select_related('leave_type')
 
@@ -386,7 +386,7 @@ def my_leaves_view(request):
 
     # Base query
     leave_requests = LeaveRequest.objects.filter(
-        employee=employee_profile
+        employee=request.user
     ).select_related('leave_type', 'approved_by')
 
     # Apply status filter
@@ -402,7 +402,7 @@ def my_leaves_view(request):
 
     # Get distinct years for filter dropdown
     years = LeaveRequest.objects.filter(
-        employee=employee_profile
+        employee=request.user
     ).dates('start_date', 'year').distinct()
 
     context = {
@@ -432,7 +432,7 @@ def cancel_leave_request(request, leave_id):
     try:
         leave_request = LeaveRequest.objects.get(
             id=leave_id,
-            employee=employee_profile
+            employee=request.user
         )
 
         # Can only cancel PENDING requests
@@ -495,7 +495,7 @@ def mark_attendance_view(request):
 
     # Check if attendance already marked today
     existing_attendance = Attendance.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         date=today
     ).first()
 
@@ -504,7 +504,7 @@ def mark_attendance_view(request):
 
     # Check if on approved leave today
     on_leave = LeaveRequest.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         status='APPROVED',
         start_date__lte=today,
         end_date__gte=today
@@ -530,7 +530,7 @@ def mark_attendance_view(request):
         else:
             # Create new attendance record
             Attendance.objects.create(
-                employee=employee_profile,
+                employee=request.user,
                 date=today,
                 status=status,
                 marked_by=request.user,
@@ -551,14 +551,14 @@ def mark_attendance_view(request):
 
     # Get attendance history for current month
     attendance_history = Attendance.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         date__month=today.month,
         date__year=today.year
     ).order_by('-date')
 
     # Monthly stats
     monthly_stats = Attendance.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         date__month=today.month,
         date__year=today.year
     ).aggregate(
@@ -604,7 +604,7 @@ def my_attendance_view(request):
 
     # Get all attendance for the month
     attendance_records = Attendance.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         date__month=selected_month,
         date__year=selected_year
     ).select_related('marked_by')
@@ -621,7 +621,7 @@ def my_attendance_view(request):
 
     # Get leaves for the month
     leaves = LeaveRequest.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         status='APPROVED',
         start_date__year=selected_year,
         start_date__month__lte=selected_month,
@@ -660,7 +660,7 @@ def my_attendance_view(request):
 
     # Monthly stats
     monthly_stats = Attendance.objects.filter(
-        employee=employee_profile,
+        employee=request.user,
         date__month=selected_month,
         date__year=selected_year
     ).aggregate(
@@ -803,6 +803,267 @@ def change_password_view(request):
             messages.error(request, error)
 
     return render(request, 'frontend/profile/change_password.html')
+
+
+# =============================================================================
+# MANAGER VIEWS - Leave Approvals
+# =============================================================================
+
+@login_required
+def leave_approvals_view(request):
+    """
+    Manager view for pending leave approvals from team members
+    """
+    # Check if user is manager or admin
+    if request.user.role not in ['MANAGER', 'ADMIN']:
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('frontend:dashboard')
+
+    try:
+        employee_profile = request.user.profile
+    except EmployeeProfile.DoesNotExist:
+        employee_profile = EmployeeProfile.objects.create(
+            user=request.user,
+            employee_id=request.user.employee_id
+        )
+
+    # Get filter parameters
+    status_filter = request.GET.get('status', 'PENDING')
+    employee_filter = request.GET.get('employee', 'ALL')
+
+    # Base query - get leave requests from team members
+    if request.user.role == 'ADMIN':
+        # Admin can see all leave requests
+        leave_requests = LeaveRequest.objects.all()
+    else:
+        # Manager can only see their team's leave requests
+        leave_requests = LeaveRequest.objects.filter(
+            employee__profile__reporting_manager=request.user
+        )
+
+    # Apply status filter
+    if status_filter != 'ALL':
+        leave_requests = leave_requests.filter(status=status_filter)
+
+    # Apply employee filter
+    if employee_filter != 'ALL':
+        leave_requests = leave_requests.filter(employee_id=employee_filter)
+
+    # Select related for performance
+    leave_requests = leave_requests.select_related(
+        'employee',
+        'employee__profile',
+        'leave_type',
+        'approved_by'
+    ).order_by('-created_at')
+
+    # Get team members for filter dropdown
+    if request.user.role == 'ADMIN':
+        team_members = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    else:
+        team_members = User.objects.filter(
+            profile__reporting_manager=request.user,
+            is_active=True
+        ).order_by('first_name', 'last_name')
+
+    # Calculate stats
+    stats = {
+        'pending': leave_requests.filter(status='PENDING').count() if status_filter == 'ALL' else None,
+        'approved': leave_requests.filter(status='APPROVED').count() if status_filter == 'ALL' else None,
+        'rejected': leave_requests.filter(status='REJECTED').count() if status_filter == 'ALL' else None,
+        'total': leave_requests.count(),
+    }
+
+    context = {
+        'leave_requests': leave_requests,
+        'status_filter': status_filter,
+        'employee_filter': employee_filter,
+        'team_members': team_members,
+        'stats': stats,
+    }
+
+    return render(request, 'frontend/manager/leave_approvals.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def approve_leave_request(request, leave_id):
+    """
+    Approve a leave request (Manager/Admin only)
+    """
+    # Check if user is manager or admin
+    if request.user.role not in ['MANAGER', 'ADMIN']:
+        return JsonResponse({
+            'success': False,
+            'message': 'You do not have permission to approve leave requests.'
+        }, status=403)
+
+    try:
+        employee_profile = request.user.profile
+    except EmployeeProfile.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Profile not found.'
+        }, status=400)
+
+    comments = request.POST.get('comments', '')
+
+    try:
+        # Get the leave request
+        if request.user.role == 'ADMIN':
+            leave_request = LeaveRequest.objects.get(id=leave_id)
+        else:
+            # Manager can only approve their team's requests
+            leave_request = LeaveRequest.objects.get(
+                id=leave_id,
+                employee__profile__reporting_manager=request.user
+            )
+
+        # Can only approve PENDING requests
+        if leave_request.status != 'PENDING':
+            return JsonResponse({
+                'success': False,
+                'message': f'Cannot approve {leave_request.status.lower()} leave request.'
+            }, status=400)
+
+        # Approve the leave request
+        leave_request.status = 'APPROVED'
+        leave_request.approved_by = request.user
+        leave_request.decision_at = timezone.now()
+        leave_request.manager_comments = comments
+        leave_request.save()
+
+        # Deduct from leave balance if it's a paid leave
+        if leave_request.leave_type.is_paid:
+            try:
+                leave_balance = LeaveBalance.objects.get(
+                    employee=leave_request.employee,
+                    leave_type=leave_request.leave_type,
+                    year=leave_request.start_date.year
+                )
+                leave_balance.used += leave_request.total_days
+                leave_balance.save()
+            except LeaveBalance.DoesNotExist:
+                pass  # No balance to deduct from
+
+        # HTMX response - return updated row
+        if request.headers.get('HX-Request'):
+            html = f'''
+            <tr id="leave-row-{leave_request.id}" class="table-success">
+                <td>{leave_request.employee.get_full_name() or leave_request.employee.username}</td>
+                <td>{leave_request.leave_type.name}</td>
+                <td>{leave_request.start_date.strftime('%b %d, %Y')}</td>
+                <td>{leave_request.end_date.strftime('%b %d, %Y')}</td>
+                <td>{leave_request.total_days}</td>
+                <td><span class="badge badge-approved">Approved</span></td>
+                <td>
+                    <small>{request.user.get_full_name() or request.user.username}</small><br>
+                    <small class="text-muted">{timezone.now().strftime('%b %d, %Y')}</small>
+                </td>
+                <td><span class="text-success">✓ Approved</span></td>
+            </tr>
+            '''
+            return HttpResponse(html)
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Leave request approved successfully.'
+        })
+
+    except LeaveRequest.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Leave request not found or you do not have permission to approve it.'
+        }, status=404)
+
+
+@login_required
+@require_http_methods(["POST"])
+def reject_leave_request(request, leave_id):
+    """
+    Reject a leave request (Manager/Admin only)
+    """
+    # Check if user is manager or admin
+    if request.user.role not in ['MANAGER', 'ADMIN']:
+        return JsonResponse({
+            'success': False,
+            'message': 'You do not have permission to reject leave requests.'
+        }, status=403)
+
+    try:
+        employee_profile = request.user.profile
+    except EmployeeProfile.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Profile not found.'
+        }, status=400)
+
+    comments = request.POST.get('comments', '')
+
+    if not comments:
+        return JsonResponse({
+            'success': False,
+            'message': 'Rejection reason is required.'
+        }, status=400)
+
+    try:
+        # Get the leave request
+        if request.user.role == 'ADMIN':
+            leave_request = LeaveRequest.objects.get(id=leave_id)
+        else:
+            # Manager can only reject their team's requests
+            leave_request = LeaveRequest.objects.get(
+                id=leave_id,
+                employee__profile__reporting_manager=employee_profile
+            )
+
+        # Can only reject PENDING requests
+        if leave_request.status != 'PENDING':
+            return JsonResponse({
+                'success': False,
+                'message': f'Cannot reject {leave_request.status.lower()} leave request.'
+            }, status=400)
+
+        # Reject the leave request
+        leave_request.status = 'REJECTED'
+        leave_request.approved_by = request.user
+        leave_request.decision_at = timezone.now()
+        leave_request.manager_comments = comments
+        leave_request.save()
+
+        # HTMX response - return updated row
+        if request.headers.get('HX-Request'):
+            html = f'''
+            <tr id="leave-row-{leave_request.id}" class="table-danger">
+                <td>{leave_request.employee.get_full_name() or leave_request.employee.username}</td>
+                <td>{leave_request.leave_type.name}</td>
+                <td>{leave_request.start_date.strftime('%b %d, %Y')}</td>
+                <td>{leave_request.end_date.strftime('%b %d, %Y')}</td>
+                <td>{leave_request.total_days}</td>
+                <td><span class="badge badge-rejected">Rejected</span></td>
+                <td>
+                    <small>{request.user.get_full_name() or request.user.username}</small><br>
+                    <small class="text-muted">{timezone.now().strftime('%b %d, %Y')}</small>
+                </td>
+                <td>
+                    <span class="text-danger">✗ Rejected</span><br>
+                    <small class="text-muted">{comments[:50]}...</small>
+                </td>
+            </tr>
+            '''
+            return HttpResponse(html)
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Leave request rejected.'
+        })
+
+    except LeaveRequest.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Leave request not found or you do not have permission to reject it.'
+        }, status=404)
+
 
 
 
