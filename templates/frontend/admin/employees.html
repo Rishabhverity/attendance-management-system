@@ -1,0 +1,425 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Employee Management - HR Leave Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- Page Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="bi bi-people"></i> Employee Management</h2>
+                    <p class="text-muted">Manage employee accounts and profiles</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#employeeModal" onclick="openCreateModal()">
+                        <i class="bi bi-plus-circle"></i> Add Employee
+                    </button>
+                    <a href="{% url 'frontend:dashboard' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Dashboard
+                    </a>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label for="search" class="form-label">Search</label>
+                            <input type="text" class="form-control" id="search" name="search" value="{{ search_query }}" placeholder="Name, email, or employee ID">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="department" class="form-label">Department</label>
+                            <select class="form-select" id="department" name="department">
+                                <option value="">All Departments</option>
+                                {% for dept in departments %}
+                                <option value="{{ dept.id }}" {% if department_filter == dept.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ dept.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="designation" class="form-label">Designation</label>
+                            <select class="form-select" id="designation" name="designation">
+                                <option value="">All Designations</option>
+                                {% for desig in designations %}
+                                <option value="{{ desig.id }}" {% if designation_filter == desig.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ desig.title }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="role" class="form-label">Role</label>
+                            <select class="form-select" id="role" name="role">
+                                <option value="">All Roles</option>
+                                {% for role_code, role_name in role_choices %}
+                                <option value="{{ role_code }}" {% if role_filter == role_code %}selected{% endif %}>
+                                    {{ role_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="status" class="form-label">Status</label>
+                            <select class="form-select" id="status" name="status">
+                                <option value="">All Status</option>
+                                <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+                                <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+                            </select>
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-search"></i>
+                            </button>
+                            <a href="{% url 'frontend:employee_list' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i>
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Employees Table -->
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        {% if employees %}
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Employee ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Department</th>
+                                    <th>Designation</th>
+                                    <th>Manager</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for emp in employees %}
+                                <tr id="emp-row-{{ emp.id }}">
+                                    <td><strong>{{ emp.employee_id }}</strong></td>
+                                    <td>{{ emp.get_full_name }}</td>
+                                    <td>{{ emp.email }}</td>
+                                    <td>{{ emp.profile.department.name|default:"—" }}</td>
+                                    <td>{{ emp.profile.designation.title|default:"—" }}</td>
+                                    <td>{{ emp.profile.reporting_manager.get_full_name|default:"—" }}</td>
+                                    <td>
+                                        {% if emp.role == 'ADMIN' %}
+                                        <span class="badge bg-danger">Admin</span>
+                                        {% elif emp.role == 'MANAGER' %}
+                                        <span class="badge bg-primary">Manager</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Employee</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if emp.profile.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                        <span class="badge bg-warning">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                onclick="openEditModal({{ emp.id }}, '{{ emp.username|escapejs }}', '{{ emp.email|escapejs }}', '{{ emp.first_name|escapejs }}', '{{ emp.last_name|escapejs }}', '{{ emp.employee_id|escapejs }}', '{{ emp.role }}', {{ emp.profile.department_id|default:'null' }}, {{ emp.profile.designation_id|default:'null' }}, {{ emp.profile.reporting_manager_id|default:'null' }}, '{{ emp.profile.date_of_joining|date:'Y-m-d'|default:'' }}', '{{ emp.profile.phone_number|escapejs }}')"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#employeeModal">
+                                            <i class="bi bi-pencil"></i> Edit
+                                        </button>
+                                        {% if emp.profile.is_active %}
+                                        <button class="btn btn-sm btn-outline-warning"
+                                                onclick="confirmDeactivate({{ emp.id }}, '{{ emp.get_full_name|escapejs }}', 'deactivate')">
+                                            <i class="bi bi-pause-circle"></i> Deactivate
+                                        </button>
+                                        {% else %}
+                                        <button class="btn btn-sm btn-outline-success"
+                                                onclick="confirmDeactivate({{ emp.id }}, '{{ emp.get_full_name|escapejs }}', 'activate')">
+                                            <i class="bi bi-play-circle"></i> Activate
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <div class="p-5 text-center">
+                            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3 text-muted">No employees found</h5>
+                            <p class="text-muted">Click "Add Employee" to create your first employee account.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Stats -->
+            {% if employees %}
+            <div class="card mt-3">
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <h4 class="text-primary">{{ employees.count }}</h4>
+                            <p class="text-muted mb-0">Total Employees</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-success">{% for e in employees %}{% if e.profile.is_active %}1{% endif %}{% endfor %}</h4>
+                            <p class="text-muted mb-0">Active</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-primary">{% for e in employees %}{% if e.role == 'MANAGER' %}1{% endif %}{% endfor %}</h4>
+                            <p class="text-muted mb-0">Managers</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-danger">{% for e in employees %}{% if e.role == 'ADMIN' %}1{% endif %}{% endfor %}</h4>
+                            <p class="text-muted mb-0">Admins</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Employee Modal (Create/Edit) -->
+<div class="modal fade" id="employeeModal" tabindex="-1" aria-labelledby="employeeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="employee-form" hx-post="" hx-swap="none">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="employeeModalLabel">Add Employee</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="emp-id" name="emp_id" value="">
+
+                    <!-- User Fields -->
+                    <h6 class="border-bottom pb-2 mb-3">Account Information</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="emp-username" class="form-label">Username <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="emp-username" name="username" required maxlength="150">
+                            <small class="form-text text-muted">Login username</small>
+                        </div>
+
+                        <div class="col-md-6 mb-3" id="password-field">
+                            <label for="emp-password" class="form-label">Password <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="emp-password" name="password" minlength="8">
+                            <small class="form-text text-muted">Minimum 8 characters</small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="emp-first-name" class="form-label">First Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="emp-first-name" name="first_name" required maxlength="150">
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="emp-last-name" class="form-label">Last Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="emp-last-name" name="last_name" required maxlength="150">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="emp-email" class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="emp-email" name="email" required maxlength="254">
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="emp-employee-id" class="form-label">Employee ID <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="emp-employee-id" name="employee_id" required maxlength="20">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="emp-role" class="form-label">Role <span class="text-danger">*</span></label>
+                        <select class="form-select" id="emp-role" name="role" required>
+                            {% for role_code, role_name in role_choices %}
+                            <option value="{{ role_code }}">{{ role_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Profile Fields -->
+                    <h6 class="border-bottom pb-2 mb-3 mt-4">Profile Information</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="emp-department" class="form-label">Department</label>
+                            <select class="form-select" id="emp-department" name="department">
+                                <option value="">— Select Department —</option>
+                                {% for dept in departments %}
+                                <option value="{{ dept.id }}">{{ dept.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="emp-designation" class="form-label">Designation</label>
+                            <select class="form-select" id="emp-designation" name="designation">
+                                <option value="">— Select Designation —</option>
+                                {% for desig in designations %}
+                                <option value="{{ desig.id }}">{{ desig.title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="emp-manager" class="form-label">Reporting Manager</label>
+                            <select class="form-select" id="emp-manager" name="reporting_manager">
+                                <option value="">— No Manager —</option>
+                                {% for mgr in managers %}
+                                <option value="{{ mgr.id }}">{{ mgr.get_full_name }} ({{ mgr.employee_id }})</option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">Only users with MANAGER role shown</small>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="emp-doj" class="form-label">Date of Joining</label>
+                            <input type="date" class="form-control" id="emp-doj" name="date_of_joining">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="emp-phone" class="form-label">Phone Number</label>
+                        <input type="tel" class="form-control" id="emp-phone" name="phone_number" maxlength="15" placeholder="+1234567890">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Save Employee
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentAction = 'create';
+
+    function openCreateModal() {
+        currentAction = 'create';
+        document.getElementById('employeeModalLabel').textContent = 'Add Employee';
+        document.getElementById('employee-form').setAttribute('hx-post', '{% url "frontend:employee_create" %}');
+        document.getElementById('emp-id').value = '';
+        document.getElementById('emp-username').value = '';
+        document.getElementById('emp-username').disabled = false;
+        document.getElementById('emp-password').value = '';
+        document.getElementById('emp-password').required = true;
+        document.getElementById('password-field').style.display = 'block';
+        document.getElementById('emp-first-name').value = '';
+        document.getElementById('emp-last-name').value = '';
+        document.getElementById('emp-email').value = '';
+        document.getElementById('emp-employee-id').value = '';
+        document.getElementById('emp-role').value = 'EMPLOYEE';
+        document.getElementById('emp-department').value = '';
+        document.getElementById('emp-designation').value = '';
+        document.getElementById('emp-manager').value = '';
+        document.getElementById('emp-doj').value = '';
+        document.getElementById('emp-phone').value = '';
+        htmx.process(document.getElementById('employee-form'));
+    }
+
+    function openEditModal(id, username, email, firstName, lastName, employeeId, role, deptId, desigId, managerId, doj, phone) {
+        currentAction = 'edit';
+        document.getElementById('employeeModalLabel').textContent = 'Edit Employee';
+        document.getElementById('employee-form').setAttribute('hx-post', '/settings/employees/' + id + '/edit/');
+        document.getElementById('emp-id').value = id;
+        document.getElementById('emp-username').value = username;
+        document.getElementById('emp-username').disabled = true; // Username cannot be changed
+        document.getElementById('emp-password').required = false;
+        document.getElementById('password-field').style.display = 'none'; // Hide password field on edit
+        document.getElementById('emp-first-name').value = firstName;
+        document.getElementById('emp-last-name').value = lastName;
+        document.getElementById('emp-email').value = email;
+        document.getElementById('emp-employee-id').value = employeeId;
+        document.getElementById('emp-role').value = role;
+        document.getElementById('emp-department').value = deptId || '';
+        document.getElementById('emp-designation').value = desigId || '';
+        document.getElementById('emp-manager').value = managerId || '';
+        document.getElementById('emp-doj').value = doj || '';
+        document.getElementById('emp-phone').value = phone || '';
+        htmx.process(document.getElementById('employee-form'));
+    }
+
+    function confirmDeactivate(id, name, action) {
+        const actionText = action === 'deactivate' ? 'deactivate' : 'activate';
+        const confirmMsg = `Are you sure you want to ${actionText} employee "${name}"?`;
+
+        if (confirm(confirmMsg)) {
+            fetch('/settings/employees/' + id + '/deactivate/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=' + action
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message);
+                    // Reload page after 1 second
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showAlert('danger', data.message);
+                }
+            })
+            .catch(error => {
+                showAlert('danger', 'An error occurred while processing the request.');
+            });
+        }
+    }
+
+    function showAlert(type, message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3`;
+        alertDiv.style.zIndex = '9999';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(alertDiv);
+        setTimeout(() => alertDiv.remove(), 3000);
+    }
+
+    // Handle HTMX form submission
+    document.body.addEventListener('htmx:afterRequest', function(event) {
+        if (event.detail.target.id === 'employee-form') {
+            if (event.detail.successful) {
+                // Form submitted successfully - modal will be closed by HX-Redirect
+                const modal = bootstrap.Modal.getInstance(document.getElementById('employeeModal'));
+                if (modal) {
+                    modal.hide();
+                }
+            } else {
+                // Show error message from response
+                const errorDiv = event.detail.xhr.responseText;
+                const modalBody = document.querySelector('#employeeModal .modal-body');
+                const existingAlert = modalBody.querySelector('.alert');
+                if (existingAlert) {
+                    existingAlert.remove();
+                }
+                modalBody.insertAdjacentHTML('afterbegin', errorDiv);
+            }
+        }
+    });
+</script>
+{% endblock %}

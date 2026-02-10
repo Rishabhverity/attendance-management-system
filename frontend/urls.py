@@ -73,9 +73,19 @@ urlpatterns = [
     path('settings/holidays/<int:holiday_id>/edit/', views.holiday_edit_view, name='holiday_edit'),
     path('settings/holidays/<int:holiday_id>/delete/', views.holiday_delete_view, name='holiday_delete'),
 
+    # Admin/Settings - Employee Management
+    path('settings/employees/', views.employee_list_view, name='employee_list'),
+    path('settings/employees/create/', views.employee_create_view, name='employee_create'),
+    path('settings/employees/<int:employee_id>/edit/', views.employee_edit_view, name='employee_edit'),
+    path('settings/employees/<int:employee_id>/deactivate/', views.employee_deactivate_view, name='employee_deactivate'),
+
+    # Admin/Settings - Leave Balance Allocation
+    path('settings/leave-balances/', views.leave_balance_list_view, name='leave_balance_allocation'),
+    path('settings/leave-balances/create/', views.leave_balance_create_view, name='leave_balance_create'),
+    path('settings/leave-balances/<int:balance_id>/adjust/', views.leave_balance_adjust_view, name='leave_balance_adjust'),
+    path('settings/leave-balances/<int:balance_id>/delete/', views.leave_balance_delete_view, name='leave_balance_delete'),
+
     # Admin/Settings placeholders
-    path('settings/employees/', placeholder_view, name='employee_list'),
-    path('settings/leave-balances/', placeholder_view, name='leave_balance_allocation'),
     path('settings/attendance/correct/', placeholder_view, name='attendance_correction'),
     path('settings/reports/', placeholder_view, name='reports'),
     path('settings/audit-logs/', placeholder_view, name='audit_logs'),

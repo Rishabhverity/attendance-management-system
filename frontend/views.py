@@ -2033,3 +2033,644 @@ def holiday_delete_view(request, holiday_id):
             'success': False,
             'message': 'Holiday not found.'
         }, status=404)
+
+
+# =======================
+# EMPLOYEE MANAGEMENT
+# =======================
+
+@login_required
+def employee_list_view(request):
+    """
+    List all employees with filtering and search
+    """
+    if request.user.role != 'ADMIN':
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('frontend:dashboard')
+
+    from employees.models import User, EmployeeProfile, Department, Designation
+
+    # Get all employees with related data
+    employees = User.objects.select_related(
+        'profile',
+        'profile__department',
+        'profile__designation',
+        'profile__reporting_manager'
+    ).all()
+
+    # Filters
+    department_filter = request.GET.get('department', '')
+    designation_filter = request.GET.get('designation', '')
+    role_filter = request.GET.get('role', '')
+    status_filter = request.GET.get('status', '')
+    search_query = request.GET.get('search', '').strip()
+
+    if department_filter:
+        employees = employees.filter(profile__department_id=department_filter)
+
+    if designation_filter:
+        employees = employees.filter(profile__designation_id=designation_filter)
+
+    if role_filter:
+        employees = employees.filter(role=role_filter)
+
+    if status_filter:
+        if status_filter == 'active':
+            employees = employees.filter(profile__is_active=True)
+        elif status_filter == 'inactive':
+            employees = employees.filter(profile__is_active=False)
+
+    if search_query:
+        from django.db.models import Q
+        employees = employees.filter(
+            Q(first_name__icontains=search_query) |
+            Q(last_name__icontains=search_query) |
+            Q(email__icontains=search_query) |
+            Q(employee_id__icontains=search_query)
+        )
+
+    # Get all departments, designations, and managers for dropdowns
+    departments = Department.objects.all().order_by('name')
+    designations = Designation.objects.all().order_by('title')
+    managers = User.objects.filter(role='MANAGER', profile__is_active=True).order_by('first_name', 'last_name')
+
+    # Role choices
+    role_choices = User.ROLE_CHOICES
+
+    context = {
+        'employees': employees.order_by('first_name', 'last_name'),
+        'departments': departments,
+        'designations': designations,
+        'managers': managers,
+        'role_choices': role_choices,
+        'department_filter': department_filter,
+        'designation_filter': designation_filter,
+        'role_filter': role_filter,
+        'status_filter': status_filter,
+        'search_query': search_query,
+    }
+
+    return render(request, 'frontend/admin/employees.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def employee_create_view(request):
+    """
+    Create a new employee (User + EmployeeProfile)
+    """
+    if request.user.role != 'ADMIN':
+        return HttpResponse(
+            '<div class="alert alert-danger">Permission denied.</div>',
+            status=403
+        )
+
+    from employees.models import User, EmployeeProfile, Department, Designation
+    from django.contrib.auth.hashers import make_password
+
+    # Get User fields
+    username = request.POST.get('username', '').strip()
+    email = request.POST.get('email', '').strip()
+    first_name = request.POST.get('first_name', '').strip()
+    last_name = request.POST.get('last_name', '').strip()
+    employee_id = request.POST.get('employee_id', '').strip()
+    role = request.POST.get('role', 'EMPLOYEE')
+    password = request.POST.get('password', '').strip()
+
+    # Get Profile fields
+    department_id = request.POST.get('department', '')
+    designation_id = request.POST.get('designation', '')
+    reporting_manager_id = request.POST.get('reporting_manager', '')
+    date_of_joining = request.POST.get('date_of_joining', '')
+    phone_number = request.POST.get('phone_number', '').strip()
+
+    # Validation
+    if not username or not email or not first_name or not last_name or not employee_id or not password:
+        return HttpResponse(
+            '<div class="alert alert-danger">Username, email, first name, last name, employee ID, and password are required.</div>',
+            status=400
+        )
+
+    # Check username uniqueness
+    if User.objects.filter(username=username).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">Username already exists.</div>',
+            status=400
+        )
+
+    # Check employee_id uniqueness
+    if User.objects.filter(employee_id=employee_id).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">Employee ID already exists.</div>',
+            status=400
+        )
+
+    # Check email uniqueness
+    if User.objects.filter(email=email).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">Email already exists.</div>',
+            status=400
+        )
+
+    # Validate password length
+    if len(password) < 8:
+        return HttpResponse(
+            '<div class="alert alert-danger">Password must be at least 8 characters long.</div>',
+            status=400
+        )
+
+    try:
+        # Create User
+        user = User.objects.create(
+            username=username,
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            employee_id=employee_id,
+            role=role,
+            password=make_password(password)
+        )
+
+        # Get related objects
+        department = Department.objects.get(id=department_id) if department_id else None
+        designation = Designation.objects.get(id=designation_id) if designation_id else None
+        reporting_manager = User.objects.get(id=reporting_manager_id) if reporting_manager_id else None
+
+        # Validate reporting manager role
+        if reporting_manager and reporting_manager.role != 'MANAGER':
+            user.delete()
+            return HttpResponse(
+                '<div class="alert alert-danger">Reporting manager must have MANAGER role.</div>',
+                status=400
+            )
+
+        # Parse date of joining
+        from datetime import datetime
+        doj = None
+        if date_of_joining:
+            try:
+                doj = datetime.strptime(date_of_joining, '%Y-%m-%d').date()
+            except ValueError:
+                user.delete()
+                return HttpResponse(
+                    '<div class="alert alert-danger">Invalid date format.</div>',
+                    status=400
+                )
+
+        # Create EmployeeProfile
+        EmployeeProfile.objects.create(
+            user=user,
+            department=department,
+            designation=designation,
+            reporting_manager=reporting_manager,
+            date_of_joining=doj,
+            phone_number=phone_number,
+            is_active=True
+        )
+
+        messages.success(request, f'Employee "{first_name} {last_name}" created successfully!')
+
+        # Return HTMX response - redirect to employee list
+        if request.headers.get('HX-Request'):
+            response = HttpResponse(status=200)
+            response['HX-Redirect'] = '/settings/employees/'
+            return response
+
+        return redirect('frontend:employee_list')
+
+    except Exception as e:
+        return HttpResponse(
+            f'<div class="alert alert-danger">Error creating employee: {str(e)}</div>',
+            status=500
+        )
+
+
+@login_required
+@require_http_methods(["POST"])
+def employee_edit_view(request, employee_id):
+    """
+    Edit an employee (User + EmployeeProfile)
+    """
+    if request.user.role != 'ADMIN':
+        return HttpResponse(
+            '<div class="alert alert-danger">Permission denied.</div>',
+            status=403
+        )
+
+    from employees.models import User, EmployeeProfile, Department, Designation
+
+    try:
+        user = User.objects.get(id=employee_id)
+        profile = user.profile
+    except (User.DoesNotExist, EmployeeProfile.DoesNotExist):
+        return HttpResponse(
+            '<div class="alert alert-danger">Employee not found.</div>',
+            status=404
+        )
+
+    # Get User fields
+    email = request.POST.get('email', '').strip()
+    first_name = request.POST.get('first_name', '').strip()
+    last_name = request.POST.get('last_name', '').strip()
+    employee_id_new = request.POST.get('employee_id', '').strip()
+    role = request.POST.get('role', 'EMPLOYEE')
+
+    # Get Profile fields
+    department_id = request.POST.get('department', '')
+    designation_id = request.POST.get('designation', '')
+    reporting_manager_id = request.POST.get('reporting_manager', '')
+    date_of_joining = request.POST.get('date_of_joining', '')
+    phone_number = request.POST.get('phone_number', '').strip()
+
+    # Validation
+    if not email or not first_name or not last_name or not employee_id_new:
+        return HttpResponse(
+            '<div class="alert alert-danger">Email, first name, last name, and employee ID are required.</div>',
+            status=400
+        )
+
+    # Check employee_id uniqueness (excluding current user)
+    if User.objects.filter(employee_id=employee_id_new).exclude(id=employee_id).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">Employee ID already exists.</div>',
+            status=400
+        )
+
+    # Check email uniqueness (excluding current user)
+    if User.objects.filter(email=email).exclude(id=employee_id).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">Email already exists.</div>',
+            status=400
+        )
+
+    try:
+        # Update User
+        user.email = email
+        user.first_name = first_name
+        user.last_name = last_name
+        user.employee_id = employee_id_new
+        user.role = role
+        user.save()
+
+        # Get related objects
+        department = Department.objects.get(id=department_id) if department_id else None
+        designation = Designation.objects.get(id=designation_id) if designation_id else None
+        reporting_manager = User.objects.get(id=reporting_manager_id) if reporting_manager_id else None
+
+        # Validate reporting manager role
+        if reporting_manager and reporting_manager.role != 'MANAGER':
+            return HttpResponse(
+                '<div class="alert alert-danger">Reporting manager must have MANAGER role.</div>',
+                status=400
+            )
+
+        # Parse date of joining
+        from datetime import datetime
+        doj = None
+        if date_of_joining:
+            try:
+                doj = datetime.strptime(date_of_joining, '%Y-%m-%d').date()
+            except ValueError:
+                return HttpResponse(
+                    '<div class="alert alert-danger">Invalid date format.</div>',
+                    status=400
+                )
+
+        # Update EmployeeProfile
+        profile.department = department
+        profile.designation = designation
+        profile.reporting_manager = reporting_manager
+        profile.date_of_joining = doj
+        profile.phone_number = phone_number
+        profile.save()
+
+        messages.success(request, f'Employee "{first_name} {last_name}" updated successfully!')
+
+        # Return HTMX response - redirect to employee list
+        if request.headers.get('HX-Request'):
+            response = HttpResponse(status=200)
+            response['HX-Redirect'] = '/settings/employees/'
+            return response
+
+        return redirect('frontend:employee_list')
+
+    except Exception as e:
+        return HttpResponse(
+            f'<div class="alert alert-danger">Error updating employee: {str(e)}</div>',
+            status=500
+        )
+
+
+@login_required
+@require_http_methods(["POST"])
+def employee_deactivate_view(request, employee_id):
+    """
+    Deactivate/activate an employee (soft delete)
+    """
+    if request.user.role != 'ADMIN':
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    from employees.models import User, EmployeeProfile
+
+    try:
+        user = User.objects.get(id=employee_id)
+        profile = user.profile
+
+        # Get desired status from request
+        action = request.POST.get('action', 'deactivate')
+
+        if action == 'deactivate':
+            profile.is_active = False
+            profile.save()
+            message = f'Employee "{user.get_full_name()}" deactivated successfully!'
+        else:
+            profile.is_active = True
+            profile.save()
+            message = f'Employee "{user.get_full_name()}" activated successfully!'
+
+        return JsonResponse({
+            'success': True,
+            'message': message
+        })
+
+    except (User.DoesNotExist, EmployeeProfile.DoesNotExist):
+        return JsonResponse({
+            'success': False,
+            'message': 'Employee not found.'
+        }, status=404)
+
+
+# =======================
+# LEAVE BALANCE ALLOCATION
+# =======================
+
+@login_required
+def leave_balance_list_view(request):
+    """
+    List all leave balances with filtering
+    """
+    if request.user.role != 'ADMIN':
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('frontend:dashboard')
+
+    from leaves.models import LeaveBalance, LeaveType
+    from employees.models import User
+    from datetime import date
+
+    # Get current year as default
+    current_year = date.today().year
+
+    # Get all balances with related data
+    balances = LeaveBalance.objects.select_related(
+        'employee',
+        'employee__profile',
+        'leave_type'
+    ).all()
+
+    # Filters
+    employee_filter = request.GET.get('employee', '')
+    leave_type_filter = request.GET.get('leave_type', '')
+    year_filter = request.GET.get('year', str(current_year))
+    search_query = request.GET.get('search', '').strip()
+
+    if employee_filter:
+        balances = balances.filter(employee_id=employee_filter)
+
+    if leave_type_filter:
+        balances = balances.filter(leave_type_id=leave_type_filter)
+
+    if year_filter:
+        balances = balances.filter(year=int(year_filter))
+
+    if search_query:
+        from django.db.models import Q
+        balances = balances.filter(
+            Q(employee__first_name__icontains=search_query) |
+            Q(employee__last_name__icontains=search_query) |
+            Q(employee__employee_id__icontains=search_query)
+        )
+
+    # Get all employees, leave types for dropdowns
+    employees = User.objects.filter(profile__is_active=True).order_by('first_name', 'last_name')
+    leave_types = LeaveType.objects.all().order_by('code')
+
+    # Get available years (from existing balances)
+    available_years = LeaveBalance.objects.values_list('year', flat=True).distinct().order_by('-year')
+    if not available_years:
+        available_years = [current_year]
+
+    context = {
+        'balances': balances.order_by('employee__first_name', 'leave_type__code'),
+        'employees': employees,
+        'leave_types': leave_types,
+        'available_years': available_years,
+        'employee_filter': employee_filter,
+        'leave_type_filter': leave_type_filter,
+        'year_filter': year_filter,
+        'search_query': search_query,
+        'current_year': current_year,
+    }
+
+    return render(request, 'frontend/admin/leave_balances.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def leave_balance_create_view(request):
+    """
+    Create/allocate a new leave balance
+    """
+    if request.user.role != 'ADMIN':
+        return HttpResponse(
+            '<div class="alert alert-danger">Permission denied.</div>',
+            status=403
+        )
+
+    from leaves.models import LeaveBalance, LeaveType
+    from employees.models import User
+    from decimal import Decimal
+
+    # Get form data
+    employee_id = request.POST.get('employee', '')
+    leave_type_id = request.POST.get('leave_type', '')
+    year = request.POST.get('year', '')
+    allocated = request.POST.get('allocated', '0')
+
+    # Validation
+    if not employee_id or not leave_type_id or not year or not allocated:
+        return HttpResponse(
+            '<div class="alert alert-danger">Employee, leave type, year, and allocated days are required.</div>',
+            status=400
+        )
+
+    try:
+        employee = User.objects.get(id=employee_id)
+        leave_type = LeaveType.objects.get(id=leave_type_id)
+        year_int = int(year)
+        allocated_decimal = Decimal(allocated)
+
+        if allocated_decimal < 0:
+            return HttpResponse(
+                '<div class="alert alert-danger">Allocated days cannot be negative.</div>',
+                status=400
+            )
+
+    except User.DoesNotExist:
+        return HttpResponse(
+            '<div class="alert alert-danger">Employee not found.</div>',
+            status=404
+        )
+    except LeaveType.DoesNotExist:
+        return HttpResponse(
+            '<div class="alert alert-danger">Leave type not found.</div>',
+            status=404
+        )
+    except (ValueError, TypeError):
+        return HttpResponse(
+            '<div class="alert alert-danger">Invalid year or allocated days.</div>',
+            status=400
+        )
+
+    # Check if balance already exists
+    if LeaveBalance.objects.filter(employee=employee, leave_type=leave_type, year=year_int).exists():
+        return HttpResponse(
+            '<div class="alert alert-danger">Balance already exists for this employee, leave type, and year.</div>',
+            status=400
+        )
+
+    try:
+        # Create balance
+        LeaveBalance.objects.create(
+            employee=employee,
+            leave_type=leave_type,
+            year=year_int,
+            allocated=allocated_decimal,
+            used=Decimal('0'),
+            adjusted=Decimal('0')
+        )
+
+        messages.success(request, f'Leave balance allocated successfully for {employee.get_full_name()}!')
+
+        # Return HTMX response - redirect to balance list
+        if request.headers.get('HX-Request'):
+            response = HttpResponse(status=200)
+            response['HX-Redirect'] = f'/settings/leave-balances/?year={year_int}'
+            return response
+
+        return redirect('frontend:leave_balance_allocation')
+
+    except Exception as e:
+        return HttpResponse(
+            f'<div class="alert alert-danger">Error creating balance: {str(e)}</div>',
+            status=500
+        )
+
+
+@login_required
+@require_http_methods(["POST"])
+def leave_balance_adjust_view(request, balance_id):
+    """
+    Adjust an existing leave balance (allocated or adjusted fields)
+    """
+    if request.user.role != 'ADMIN':
+        return HttpResponse(
+            '<div class="alert alert-danger">Permission denied.</div>',
+            status=403
+        )
+
+    from leaves.models import LeaveBalance
+    from decimal import Decimal
+
+    try:
+        balance = LeaveBalance.objects.get(id=balance_id)
+    except LeaveBalance.DoesNotExist:
+        return HttpResponse(
+            '<div class="alert alert-danger">Balance not found.</div>',
+            status=404
+        )
+
+    # Get form data
+    allocated = request.POST.get('allocated', '')
+    adjusted = request.POST.get('adjusted', '')
+
+    # Validation
+    if not allocated and not adjusted:
+        return HttpResponse(
+            '<div class="alert alert-danger">At least one field (allocated or adjusted) must be provided.</div>',
+            status=400
+        )
+
+    try:
+        if allocated:
+            allocated_decimal = Decimal(allocated)
+            if allocated_decimal < 0:
+                return HttpResponse(
+                    '<div class="alert alert-danger">Allocated days cannot be negative.</div>',
+                    status=400
+                )
+            balance.allocated = allocated_decimal
+
+        if adjusted:
+            adjusted_decimal = Decimal(adjusted)
+            balance.adjusted = adjusted_decimal
+
+        balance.save()
+
+        messages.success(request, f'Balance adjusted successfully for {balance.employee.get_full_name()}!')
+
+        # Return HTMX response - redirect to balance list
+        if request.headers.get('HX-Request'):
+            response = HttpResponse(status=200)
+            response['HX-Redirect'] = f'/settings/leave-balances/?year={balance.year}'
+            return response
+
+        return redirect('frontend:leave_balance_allocation')
+
+    except (ValueError, TypeError):
+        return HttpResponse(
+            '<div class="alert alert-danger">Invalid allocated or adjusted value.</div>',
+            status=400
+        )
+    except Exception as e:
+        return HttpResponse(
+            f'<div class="alert alert-danger">Error adjusting balance: {str(e)}</div>',
+            status=500
+        )
+
+
+@login_required
+@require_http_methods(["POST"])
+def leave_balance_delete_view(request, balance_id):
+    """
+    Delete a leave balance
+    """
+    if request.user.role != 'ADMIN':
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    from leaves.models import LeaveBalance
+
+    try:
+        balance = LeaveBalance.objects.get(id=balance_id)
+
+        # Check if balance has been used
+        if balance.used > 0:
+            return JsonResponse({
+                'success': False,
+                'message': 'Cannot delete balance that has been used. Consider adjusting instead.'
+            }, status=400)
+
+        employee_name = balance.employee.get_full_name()
+        leave_type_name = balance.leave_type.name
+
+        balance.delete()
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Balance deleted successfully for {employee_name} - {leave_type_name}!'
+        })
+
+    except LeaveBalance.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Balance not found.'
+        }, status=404)

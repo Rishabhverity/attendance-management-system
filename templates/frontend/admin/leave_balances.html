@@ -1,0 +1,361 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Leave Balance Allocation - HR Leave Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- Page Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="bi bi-calendar-check"></i> Leave Balance Allocation</h2>
+                    <p class="text-muted">Allocate and manage employee leave balances</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#balanceModal" onclick="openCreateModal()">
+                        <i class="bi bi-plus-circle"></i> Allocate Balance
+                    </button>
+                    <a href="{% url 'frontend:dashboard' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Dashboard
+                    </a>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label for="search" class="form-label">Search Employee</label>
+                            <input type="text" class="form-control" id="search" name="search" value="{{ search_query }}" placeholder="Name or employee ID">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="employee" class="form-label">Employee</label>
+                            <select class="form-select" id="employee" name="employee">
+                                <option value="">All Employees</option>
+                                {% for emp in employees %}
+                                <option value="{{ emp.id }}" {% if employee_filter == emp.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ emp.get_full_name }} ({{ emp.employee_id }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="leave_type" class="form-label">Leave Type</label>
+                            <select class="form-select" id="leave_type" name="leave_type">
+                                <option value="">All Types</option>
+                                {% for lt in leave_types %}
+                                <option value="{{ lt.id }}" {% if leave_type_filter == lt.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ lt.code }} - {{ lt.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="year" class="form-label">Year</label>
+                            <select class="form-select" id="year" name="year">
+                                {% for yr in available_years %}
+                                <option value="{{ yr }}" {% if year_filter == yr|stringformat:"s" %}selected{% endif %}>
+                                    {{ yr }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-search"></i> Filter
+                            </button>
+                            <a href="{% url 'frontend:leave_balance_allocation' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i>
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Balances Table -->
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        {% if balances %}
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Employee</th>
+                                    <th>Employee ID</th>
+                                    <th>Leave Type</th>
+                                    <th>Year</th>
+                                    <th>Allocated</th>
+                                    <th>Used</th>
+                                    <th>Adjusted</th>
+                                    <th>Available</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for balance in balances %}
+                                <tr id="balance-row-{{ balance.id }}">
+                                    <td><strong>{{ balance.employee.get_full_name }}</strong></td>
+                                    <td>{{ balance.employee.employee_id }}</td>
+                                    <td>
+                                        <span class="badge bg-primary">{{ balance.leave_type.code }}</span>
+                                        {{ balance.leave_type.name }}
+                                    </td>
+                                    <td>{{ balance.year }}</td>
+                                    <td>{{ balance.allocated }}</td>
+                                    <td>{{ balance.used }}</td>
+                                    <td>
+                                        {% if balance.adjusted > 0 %}
+                                        <span class="text-success">+{{ balance.adjusted }}</span>
+                                        {% elif balance.adjusted < 0 %}
+                                        <span class="text-danger">{{ balance.adjusted }}</span>
+                                        {% else %}
+                                        0.0
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <strong class="{% if balance.available > 0 %}text-success{% elif balance.available < 0 %}text-danger{% else %}text-muted{% endif %}">
+                                            {{ balance.available }}
+                                        </strong>
+                                    </td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                onclick="openAdjustModal({{ balance.id }}, '{{ balance.employee.get_full_name|escapejs }}', '{{ balance.leave_type.name|escapejs }}', {{ balance.year }}, {{ balance.allocated }}, {{ balance.adjusted }})"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#adjustModal">
+                                            <i class="bi bi-pencil"></i> Adjust
+                                        </button>
+                                        {% if balance.used == 0 %}
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                onclick="confirmDelete({{ balance.id }}, '{{ balance.employee.get_full_name|escapejs }}', '{{ balance.leave_type.name|escapejs }}')">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <div class="p-5 text-center">
+                            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3 text-muted">No leave balances found</h5>
+                            <p class="text-muted">Click "Allocate Balance" to create employee leave balances.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Stats -->
+            {% if balances %}
+            <div class="card mt-3">
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <h4 class="text-primary">{{ balances.count }}</h4>
+                            <p class="text-muted mb-0">Total Balances</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-info">{% widthratio balances|length 1 1 %}</h4>
+                            <p class="text-muted mb-0">Employees with Balances</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-success">{{ year_filter }}</h4>
+                            <p class="text-muted mb-0">Selected Year</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-warning">{{ leave_types.count }}</h4>
+                            <p class="text-muted mb-0">Leave Types</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Allocate Balance Modal (Create) -->
+<div class="modal fade" id="balanceModal" tabindex="-1" aria-labelledby="balanceModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="balance-form" hx-post="" hx-swap="none">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="balanceModalLabel">Allocate Leave Balance</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="balance-employee" class="form-label">Employee <span class="text-danger">*</span></label>
+                        <select class="form-select" id="balance-employee" name="employee" required>
+                            <option value="">— Select Employee —</option>
+                            {% for emp in employees %}
+                            <option value="{{ emp.id }}">{{ emp.get_full_name }} ({{ emp.employee_id }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="balance-leave-type" class="form-label">Leave Type <span class="text-danger">*</span></label>
+                        <select class="form-select" id="balance-leave-type" name="leave_type" required>
+                            <option value="">— Select Leave Type —</option>
+                            {% for lt in leave_types %}
+                            <option value="{{ lt.id }}">{{ lt.code }} - {{ lt.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="balance-year" class="form-label">Year <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="balance-year" name="year" required min="2020" max="2100" value="{{ current_year }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="balance-allocated" class="form-label">Allocated Days <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="balance-allocated" name="allocated" required min="0" step="0.5" placeholder="e.g., 12.0">
+                        <small class="form-text text-muted">Number of leave days to allocate (can use 0.5 for half days)</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Allocate Balance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Adjust Balance Modal -->
+<div class="modal fade" id="adjustModal" tabindex="-1" aria-labelledby="adjustModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="adjust-form" hx-post="" hx-swap="none">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="adjustModalLabel">Adjust Leave Balance</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="adjust-balance-id" name="balance_id" value="">
+
+                    <div class="alert alert-info">
+                        <strong id="adjust-employee-name"></strong><br>
+                        <small id="adjust-leave-type"></small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="adjust-allocated" class="form-label">Allocated Days <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="adjust-allocated" name="allocated" required min="0" step="0.5">
+                        <small class="form-text text-muted">Total leave days allocated for the year</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="adjust-adjusted" class="form-label">Adjustment <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="adjust-adjusted" name="adjusted" required step="0.5" placeholder="0.0">
+                        <small class="form-text text-muted">Manual adjustment (positive or negative, e.g., +2.0 or -1.5)</small>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong> Adjusting the balance will affect the available leave days. Ensure the adjustment is accurate.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openCreateModal() {
+        document.getElementById('balanceModalLabel').textContent = 'Allocate Leave Balance';
+        document.getElementById('balance-form').setAttribute('hx-post', '{% url "frontend:leave_balance_create" %}');
+        document.getElementById('balance-employee').value = '';
+        document.getElementById('balance-leave-type').value = '';
+        document.getElementById('balance-year').value = '{{ current_year }}';
+        document.getElementById('balance-allocated').value = '';
+        htmx.process(document.getElementById('balance-form'));
+    }
+
+    function openAdjustModal(id, employeeName, leaveType, year, allocated, adjusted) {
+        document.getElementById('adjustModalLabel').textContent = 'Adjust Leave Balance';
+        document.getElementById('adjust-form').setAttribute('hx-post', '/settings/leave-balances/' + id + '/adjust/');
+        document.getElementById('adjust-balance-id').value = id;
+        document.getElementById('adjust-employee-name').textContent = employeeName + ' - ' + year;
+        document.getElementById('adjust-leave-type').textContent = leaveType;
+        document.getElementById('adjust-allocated').value = allocated;
+        document.getElementById('adjust-adjusted').value = adjusted;
+        htmx.process(document.getElementById('adjust-form'));
+    }
+
+    function confirmDelete(id, employeeName, leaveType) {
+        if (confirm(`Are you sure you want to delete the balance for ${employeeName} - ${leaveType}?\n\nThis action cannot be undone.`)) {
+            fetch('/settings/leave-balances/' + id + '/delete/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message);
+                    // Reload page after 1 second
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showAlert('danger', data.message);
+                }
+            })
+            .catch(error => {
+                showAlert('danger', 'An error occurred while deleting the balance.');
+            });
+        }
+    }
+
+    function showAlert(type, message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3`;
+        alertDiv.style.zIndex = '9999';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(alertDiv);
+        setTimeout(() => alertDiv.remove(), 3000);
+    }
+
+    // Handle HTMX form submission
+    document.body.addEventListener('htmx:afterRequest', function(event) {
+        if (event.detail.target.id === 'balance-form' || event.detail.target.id === 'adjust-form') {
+            if (event.detail.successful) {
+                // Form submitted successfully - modal will be closed by HX-Redirect
+                const modalId = event.detail.target.id === 'balance-form' ? 'balanceModal' : 'adjustModal';
+                const modal = bootstrap.Modal.getInstance(document.getElementById(modalId));
+                if (modal) {
+                    modal.hide();
+                }
+            } else {
+                // Show error message from response
+                const errorDiv = event.detail.xhr.responseText;
+                const modalBody = event.detail.target.querySelector('.modal-body');
+                const existingAlert = modalBody.querySelector('.alert-danger');
+                if (existingAlert) {
+                    existingAlert.remove();
+                }
+                modalBody.insertAdjacentHTML('afterbegin', errorDiv);
+            }
+        }
+    });
+</script>
+{% endblock %}
